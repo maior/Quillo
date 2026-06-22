@@ -411,7 +411,7 @@ MAIN_TEX_TEMPLATE = """\\documentclass{article}
 \\usepackage{graphicx}
 
 \\title{__TITLE__}
-\\author{MSPL}
+\\author{}
 
 \\begin{document}
 \\maketitle
@@ -929,7 +929,7 @@ def usage_guide(
 
     paper = _get_paper_or_404(db, paper_ref, user)
     base = f"/api/papers/{paper.key}"
-    md = f"""# MSPL Paper Workspace — 외부 편집 가이드
+    md = f"""# Quillo — 외부 편집 가이드
 
 이 프로젝트: **{paper.title}** (`{base}`)
 인증: 모든 요청에 `Authorization: Bearer <토큰>` 헤더.

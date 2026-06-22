@@ -6,7 +6,8 @@
     "dev": "next dev -p 8678",
     "build": "next build",
     "start": "next start -p 8678",
-    "lint": "next lint"
+    "lint": "next lint",
+    "e2e": "node tests/smoke.e2e.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",
@@ -20,6 +21,7 @@
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
     "autoprefixer": "10.4.20",
+    "playwright": "^1.61.0",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "typescript": "5.7.2"

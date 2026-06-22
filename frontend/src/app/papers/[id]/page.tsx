@@ -35,7 +35,7 @@ import PdfViewer from "@/components/PdfViewer";
 import LatexToolbar from "@/components/LatexToolbar";
 import LatexEditor, { LatexHighlight } from "@/components/LatexEditor";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:9288";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8675";
 
 interface Paper {
   id: number;
@@ -812,7 +812,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           draggable={editable && node.file != null}
           onDragStart={(e) => {
             if (!editable || !node.file) return;
-            e.dataTransfer.setData("application/x-mspl-file", String(node.file.id));
+            e.dataTransfer.setData("application/x-quillo-file", String(node.file.id));
             e.dataTransfer.effectAllowed = "move";
           }}
           onDragOver={
@@ -836,7 +836,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   e.stopPropagation();
                   setDropTarget(null);
                   setDragging(false);
-                  const fid = e.dataTransfer.getData("application/x-mspl-file");
+                  const fid = e.dataTransfer.getData("application/x-quillo-file");
                   if (fid) void moveEntry(Number(fid), node.path);
                   // OS 파일을 폴더 위에 떨어뜨리면 그 폴더로 업로드
                   else if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files, node.path);
@@ -1376,14 +1376,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 </p>
                 <div className="mt-1.5 flex items-start gap-2 rounded-xl bg-gray-50 p-4">
                   <pre data-testid="agent-prompt" className="min-w-0 flex-1 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-ink/75">
-{`이 MSPL 논문을 작업해줘.
+{`이 Quillo 논문을 작업해줘.
 - API: ${API_BASE}/api/papers/${paper.key || id}
 - 토큰: ${issuedToken ?? "<발급받은 토큰>"}`}
                   </pre>
                   <button
                     onClick={async () => {
                       await navigator.clipboard.writeText(
-                        `이 MSPL 논문을 작업해줘.\n- API: ${API_BASE}/api/papers/${paper.key || id}\n- 토큰: ${issuedToken ?? "<발급받은 토큰>"}`,
+                        `이 Quillo 논문을 작업해줘.\n- API: ${API_BASE}/api/papers/${paper.key || id}\n- 토큰: ${issuedToken ?? "<발급받은 토큰>"}`,
                       );
                       flash("프롬프트를 복사했습니다.");
                     }}
@@ -1432,7 +1432,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             e.preventDefault();
             setDragging(false);
             setDropTarget(null);
-            const fid = e.dataTransfer.getData("application/x-mspl-file");
+            const fid = e.dataTransfer.getData("application/x-quillo-file");
             if (fid) void moveEntry(Number(fid), ""); // 빈 영역에 놓으면 최상위로
             else if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files);
           }}
