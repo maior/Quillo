@@ -8,7 +8,7 @@ You bring your own model. Quillo just makes the paper reachable.
 
 ![Quillo editor — file tree, LaTeX source, and live PDF preview side by side](docs/screenshots/editor.png)
 
-*The editor: file tree, LaTeX source with syntax highlighting, and a live `xelatex` PDF preview — the same project an agent edits over the API.*
+*The editor: a multi-file project (`main.tex` pulling in `sections/*.tex` via `\input`, a figure under `figures/`), LaTeX source with syntax highlighting, and a live `xelatex` PDF preview — the same project an agent edits over the API.*
 
 | Layer | Stack | Default port |
 |---|---|---|
@@ -82,6 +82,10 @@ scripts/restart.sh    # git pull + restart
 ## Connecting your AI agent
 
 This is the part Overleaf can't do. Any agent that can make HTTP requests becomes a co-author.
+
+![Quillo "External API access" dialog — project API URL, personal token, and a ready-to-paste agent prompt](docs/screenshots/api-share.png)
+
+*The **API** button in the editor opens "External API access": it shows this paper's API URL, lets you issue/revoke a personal token, and gives you a ready-to-paste prompt for an agent. Hand the agent just the URL + token — it discovers everything else from the in-app guide. External edits obey the same lock model, so writes are rejected (423) while someone else is editing.*
 
 ### 1. Get a personal API token
 
