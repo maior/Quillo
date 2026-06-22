@@ -4,16 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 /**
- * pdf.js 기반 미리보기 — 브라우저 내장 뷰어(어두운 배경·툴바) 대신
- * 밝은 배경 위에 종이(캔버스)를 직접 렌더한다.
+ * pdf.js-based preview — instead of the browser's built-in viewer (dark background and toolbar),
+ * it renders the pages (canvases) directly on a light background.
  *
- * 주의: ResizeObserver 는 내용물이 아닌 "외부 스크롤 컨테이너"를 관찰하고
- * 폭이 실제로 변했을 때만 재렌더한다 — 캔버스 추가로 높이가 변하면
- * 자기 자신을 다시 트리거하는 무한 루프(깜박임)가 생기기 때문.
+ * Note: the ResizeObserver watches the "outer scroll container" rather than the content,
+ * and re-renders only when the width actually changes — otherwise a height change from
+ * adding a canvas would re-trigger itself, causing an infinite loop (flicker).
  */
 export default function PdfViewer({ data }: { data: ArrayBuffer }) {
-  const scrollRef = useRef<HTMLDivElement>(null); // 폭 관찰 대상 (레이아웃이 결정)
-  const contentRef = useRef<HTMLDivElement>(null); // 캔버스가 들어가는 내용물
+  const scrollRef = useRef<HTMLDivElement>(null); // width observation target (determined by layout)
+  const contentRef = useRef<HTMLDivElement>(null); // content that holds the canvases
   const [rendering, setRendering] = useState(true);
   const renderSeq = useRef(0);
   const lastWidth = useRef(0);
@@ -34,11 +34,11 @@ export default function PdfViewer({ data }: { data: ArrayBuffer }) {
         import.meta.url,
       ).toString();
 
-      // data 는 재사용되므로 복사본 전달 (pdf.js 가 buffer 를 detach 함)
+      // data is reused, so pass a copy (pdf.js detaches the buffer)
       const doc = await pdfjs.getDocument({ data: data.slice(0) }).promise;
       if (cancelled || seq !== renderSeq.current) return;
 
-      const pageWidth = scroll.clientWidth - 48; // 좌우 여백
+      const pageWidth = scroll.clientWidth - 48; // left/right margin
       lastWidth.current = scroll.clientWidth;
       const dpr = window.devicePixelRatio || 1;
       const canvases: HTMLCanvasElement[] = [];
@@ -64,14 +64,14 @@ export default function PdfViewer({ data }: { data: ArrayBuffer }) {
         if (cancelled || seq !== renderSeq.current) return;
         canvases.push(canvas);
       }
-      // 전 페이지 렌더 완료 후 한 번에 교체 — 중간 빈 화면 없음
+      // swap in all pages at once after rendering completes — no blank screen in between
       content.replaceChildren(...canvases);
       setRendering(false);
     };
 
     void render();
 
-    // 분할바 드래그 등 "폭" 변화에만 반응 (높이 변화 = 내용물 추가 → 무시)
+    // react only to "width" changes such as dragging the split bar (height change = added content → ignore)
     let debounce: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver((entries) => {
       const width = Math.round(entries[0]?.contentRect.width ?? 0);

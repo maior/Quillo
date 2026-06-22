@@ -1,4 +1,4 @@
-# 의존성·빌드 산출물
+# Dependencies & build artifacts
 frontend/node_modules/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo
@@ -8,16 +8,16 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# 운영 데이터 — DB 와 업로드 파일은 저장소에 넣지 않는다
+# Runtime data — the DB and uploaded files are never committed
 backend/quillo.db
 backend/uploads/
 
-# 로컬 환경·로그
+# Local environment & logs
 frontend/.env.local
 .env
 .DS_Store
 nohup.out
 logs/
 
-# Claude 로컬 설정만 제외 (CLAUDE.md 는 프로젝트 컨텍스트로 커밋)
-.claude/settings.local.json
+# Claude Code workspace — kept local, not published
+.claude/

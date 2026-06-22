@@ -1,18 +1,18 @@
-"""Quillo — 협업 LaTeX 논문 워크스페이스 (추출 가능한 패키지).
+"""Quillo — collaborative LaTeX paper workspace (extractable package).
 
-호스트 앱(mspl 등)에 임베드하는 법:
+How to embed into a host app (such as mspl):
 
     from quillo import paper_router, templates_router, get_current_user, get_db, Base
     from quillo.papers_routes import PAPER_UPLOAD_DIR
 
     app.include_router(paper_router)
     app.include_router(templates_router)
-    # 호스트 사용자/세션으로 교체 — CurrentUser 는 (id, name, email, role) 속성만 있으면 된다
+    # Swap in the host user/session — CurrentUser only needs the (id, name, email, role) attributes
     app.dependency_overrides[get_current_user] = host_get_current_user
     app.dependency_overrides[get_db] = host_get_db
-    Base.metadata.create_all(bind=host_engine)  # paper_* 테이블을 호스트 DB 에 생성
+    Base.metadata.create_all(bind=host_engine)  # create the paper_* tables in the host DB
 
-standalone 구동: `uvicorn quillo.main:app --port 8675`
+standalone run: `uvicorn quillo.main:app --port 8675`
 """
 from __future__ import annotations
 

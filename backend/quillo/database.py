@@ -1,4 +1,4 @@
-"""SQLite 엔진/세션/Base 정의 및 DB 의존성."""
+"""SQLite engine/session/Base definitions and the DB dependency."""
 from __future__ import annotations
 
 import os
@@ -7,7 +7,7 @@ from collections.abc import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-# DB 파일 경로 (환경변수로 오버라이드 가능 — 테스트·임베드에서 사용)
+# DB file path (overridable via environment variable — used in tests and embedding)
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "quillo.db")
 DATABASE_URL = os.environ.get("QUILLO_DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
@@ -20,7 +20,7 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI 의존성: 요청 단위 세션. 호스트 앱이 override 할 수 있다."""
+    """FastAPI dependency: a per-request session. Can be overridden by the host app."""
     db = SessionLocal()
     try:
         yield db

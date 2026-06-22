@@ -1,7 +1,7 @@
-"""인증 유틸 — 표준 라이브러리만 사용 (PBKDF2 해시 + 불투명 세션 토큰).
+"""Authentication utilities — standard library only (PBKDF2 hashing + opaque session tokens).
 
-get_current_user / get_db 는 호스트 앱이 app.dependency_overrides 로 교체할 수 있다.
-이것이 Quillo 를 mspl 같은 호스트에 임베드하는 결합 지점이다.
+get_current_user / get_db can be swapped out by the host app via app.dependency_overrides.
+This is the coupling point for embedding Quillo into a host such as mspl.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def destroy_session(db: Session, token: str) -> None:
 
 
 def hash_api_token(token: str) -> str:
-    """API 토큰은 sha256 해시만 저장한다 (원문은 발급 시 1회 노출)."""
+    """API tokens store only the sha256 hash (the plaintext is exposed once, at issuance)."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -65,7 +65,7 @@ def get_current_user(
     quillo_session: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
 ) -> models.User:
-    # 외부 도구용 Bearer API 토큰 — 쿠키와 동일한 사용자 권한으로 동작
+    # Bearer API token for external tools — operates with the same user privileges as the cookie
     if authorization and authorization.startswith("Bearer "):
         candidate = authorization[len("Bearer ") :].strip()
         rec = db.scalar(

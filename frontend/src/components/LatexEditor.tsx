@@ -3,21 +3,22 @@
 import { RefObject, useMemo, useRef, useState } from "react";
 
 /**
- * LaTeX 구문 강조 에디터 — 오버레이 방식.
+ * LaTeX syntax-highlighting editor — overlay approach.
  *
- * 실제 입력은 기존 textarea 가 그대로 받는다(자동 저장·스니펫 삽입·테스트 모두 무손상).
- * 글자색만 투명하게 하고, 뒤에 같은 타이포그래피의 레이어를 깔아
- * 커서·선택은 textarea, 색(구문)·형광(코멘트 구간)은 레이어가 담당한다. 의존성 없음.
+ * The actual input is still handled by the original textarea (autosave, snippet insertion,
+ * and tests all remain intact). Only the text color is made transparent, and a layer with the
+ * same typography is placed behind it: the textarea owns the cursor and selection, while the
+ * layer owns the colors (syntax) and highlights (commented ranges). No dependencies.
  *
- * 추가 기능:
- * - marks: 코멘트가 달린 구간을 형광으로 표시
- * - 백슬래시(\) 자동완성: \ 를 입력하면 명령 후보가 떠서 ↑↓ + Enter 로 선택
+ * Extra features:
+ * - marks: highlights commented ranges
+ * - backslash (\) autocomplete: typing \ shows command candidates, select with ↑↓ + Enter
  */
 
 type Token = { text: string; kind: TokenKind };
 type TokenKind = "command" | "comment" | "math" | "brace" | "special" | "env" | "plain";
 
-// 색은 라이트 테마 기준 — 본문(ink)과 또렷이 구분되는 5계열
+// colors target the light theme — 5 families clearly distinct from the body text (ink)
 const TOKEN_CLS: Record<TokenKind, string> = {
   command: "text-blue-600",
   comment: "italic text-slate-400",
@@ -28,14 +29,14 @@ const TOKEN_CLS: Record<TokenKind, string> = {
   plain: "",
 };
 
-// 한 번의 순차 스캔 — \% 가 주석으로 오인되지 않도록 명령을 먼저 매칭
+// a single sequential scan — match commands first so \% is not mistaken for a comment
 const TOKEN_RE =
   /(\\(?:[a-zA-Z@]+\*?|.))|(%[^\n]*)|(\$\$[\s\S]*?\$\$|\$[^$\n]*\$)|([{}[\]])|([&^_~])/g;
 
 export function tokenizeLatex(src: string): Token[] {
   const tokens: Token[] = [];
   let last = 0;
-  let pendingEnv = false; // 직전 토큰이 \begin/\end — 다음 {이름} 을 env 로
+  let pendingEnv = false; // previous token was \begin/\end — treat the next {name} as env
   TOKEN_RE.lastIndex = 0;
   for (let m = TOKEN_RE.exec(src); m; m = TOKEN_RE.exec(src)) {
     if (m.index > last) {
@@ -54,7 +55,7 @@ export function tokenizeLatex(src: string): Token[] {
       pendingEnv = text === "\\begin" || text === "\\end";
       tokens.push({ text, kind });
     } else if (pendingEnv && text === "{") {
-      // \begin{figure} 의 환경 이름을 강조
+      // highlight the environment name in \begin{figure}
       const rest = src.slice(m.index + 1);
       const env = /^[a-zA-Z*]+(?=\})/.exec(rest);
       tokens.push({ text, kind: "brace" });
@@ -73,7 +74,7 @@ export function tokenizeLatex(src: string): Token[] {
   return tokens;
 }
 
-// textarea 와 레이어가 픽셀 단위로 겹치도록 타이포그래피를 한 곳에서 정의
+// define typography in one place so the textarea and layer overlap pixel-for-pixel
 const TYPO = "p-5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words";
 
 export function LatexHighlight({ value, className = "" }: { value: string; className?: string }) {
@@ -89,12 +90,12 @@ export function LatexHighlight({ value, className = "" }: { value: string; class
           </span>
         ),
       )}
-      {"\n" /* 마지막 줄 높이 유지 */}
+      {"\n" /* keep the height of the last line */}
     </>
   );
 }
 
-// ── 코멘트 마크 레이어 — 글자는 투명, 구간 배경만 형광 ──
+// ── comment mark layer — text is transparent, only the range background is highlighted ──
 export type Mark = { start: number; end: number };
 
 function MarkLayer({ value, marks }: { value: string; marks: Mark[] }) {
@@ -123,65 +124,65 @@ function MarkLayer({ value, marks }: { value: string; marks: Mark[] }) {
   );
 }
 
-// ── 백슬래시 자동완성 명령 사전 ──
+// ── backslash autocomplete command dictionary ──
 type Command = { insert: string; label: string };
 const C = (insert: string, label: string): Command => ({ insert, label });
 const COMMANDS: Command[] = [
-  C("\\section{}", "절 제목"),
-  C("\\subsection{}", "소절 제목"),
-  C("\\subsubsection{}", "소소절 제목"),
-  C("\\textbf{}", "굵게"),
-  C("\\textit{}", "기울임"),
-  C("\\emph{}", "강조"),
-  C("\\underline{}", "밑줄"),
-  C("\\texttt{}", "고정폭"),
-  C("\\cite{}", "문헌 인용"),
-  C("\\ref{}", "교차 참조"),
-  C("\\label{}", "라벨"),
-  C("\\caption{}", "캡션"),
-  C("\\footnote{}", "각주"),
-  C("\\frac{}{}", "분수"),
-  C("\\sqrt{}", "제곱근"),
-  C("\\sum_{}^{}", "합 Σ"),
-  C("\\int_{}^{}", "적분 ∫"),
-  C("\\includegraphics[width=\\linewidth]{}", "그림 삽입"),
+  C("\\section{}", "Section heading"),
+  C("\\subsection{}", "Subsection heading"),
+  C("\\subsubsection{}", "Subsubsection heading"),
+  C("\\textbf{}", "Bold"),
+  C("\\textit{}", "Italic"),
+  C("\\emph{}", "Emphasis"),
+  C("\\underline{}", "Underline"),
+  C("\\texttt{}", "Monospace"),
+  C("\\cite{}", "Citation"),
+  C("\\ref{}", "Cross-reference"),
+  C("\\label{}", "Label"),
+  C("\\caption{}", "Caption"),
+  C("\\footnote{}", "Footnote"),
+  C("\\frac{}{}", "Fraction"),
+  C("\\sqrt{}", "Square root"),
+  C("\\sum_{}^{}", "Sum Σ"),
+  C("\\int_{}^{}", "Integral ∫"),
+  C("\\includegraphics[width=\\linewidth]{}", "Insert image"),
   C(
     "\\begin{figure}[ht]\n  \\centering\n  \\includegraphics[width=0.8\\linewidth]{}\n  \\caption{}\n  \\label{fig:}\n\\end{figure}",
-    "그림 환경",
+    "Figure environment",
   ),
   C(
     "\\begin{table}[ht]\n  \\caption{}\n  \\centering\n  \\begin{tabular}{lcc}\n    \\hline\n     &  &  \\\\\n    \\hline\n  \\end{tabular}\n\\end{table}",
-    "표 환경",
+    "Table environment",
   ),
-  C("\\begin{equation}\n  \n\\end{equation}", "수식 환경"),
-  C("\\begin{itemize}\n  \\item \n\\end{itemize}", "글머리 목록"),
-  C("\\begin{enumerate}\n  \\item \n\\end{enumerate}", "번호 목록"),
-  C("\\begin{abstract}\n\n\\end{abstract}", "초록"),
-  C("\\item ", "목록 항목"),
-  C("\\maketitle", "제목 생성"),
-  C("\\tableofcontents", "목차"),
-  C("\\usepackage{}", "패키지 로드"),
-  C("\\input{}", "파일 포함"),
-  C("\\centering", "가운데 정렬"),
-  C("\\textsuperscript{}", "위 첨자"),
-  C("\\textsubscript{}", "아래 첨자"),
-  C("\\textcolor{}{}", "글자색"),
+  C("\\begin{equation}\n  \n\\end{equation}", "Equation environment"),
+  C("\\begin{itemize}\n  \\item \n\\end{itemize}", "Bulleted list"),
+  C("\\begin{enumerate}\n  \\item \n\\end{enumerate}", "Numbered list"),
+  C("\\begin{abstract}\n\n\\end{abstract}", "Abstract"),
+  C("\\item ", "List item"),
+  C("\\maketitle", "Make title"),
+  C("\\tableofcontents", "Table of contents"),
+  C("\\usepackage{}", "Load package"),
+  C("\\input{}", "Include file"),
+  C("\\centering", "Center"),
+  C("\\textsuperscript{}", "Superscript"),
+  C("\\textsubscript{}", "Subscript"),
+  C("\\textcolor{}{}", "Text color"),
   C("\\alpha", "α"),
   C("\\beta", "β"),
   C("\\gamma", "γ"),
   C("\\delta", "δ"),
   C("\\sigma", "σ"),
   C("\\mu", "µ"),
-  C("\\circ", "° (원 기호)"),
+  C("\\circ", "° (degree symbol)"),
   C("\\times", "×"),
   C("\\pm", "±"),
   C("\\leq", "≤"),
   C("\\geq", "≥"),
-  C("\\hline", "표 가로줄"),
-  C("\\newpage", "쪽 나눔"),
-  C("\\noindent", "들여쓰기 없음"),
-  C("\\vspace{}", "세로 간격"),
-  C("\\hspace{}", "가로 간격"),
+  C("\\hline", "Table rule"),
+  C("\\newpage", "Page break"),
+  C("\\noindent", "No indent"),
+  C("\\vspace{}", "Vertical space"),
+  C("\\hspace{}", "Horizontal space"),
 ];
 
 function caretInInsert(insert: string): number {
@@ -192,7 +193,7 @@ function caretInInsert(insert: string): number {
   return insert.length;
 }
 
-/** textarea 캐럿의 픽셀 좌표 — 동일 타이포그래피 미러로 측정 */
+/** pixel coordinates of the textarea caret — measured with an identical-typography mirror */
 function caretCoords(ta: HTMLTextAreaElement, pos: number): { top: number; left: number } {
   const div = document.createElement("div");
   const cs = getComputedStyle(ta);
@@ -230,7 +231,7 @@ type Menu = {
   open: boolean;
   items: Command[];
   sel: number;
-  start: number; // '\' 의 인덱스
+  start: number; // index of the '\'
   top: number;
   left: number;
 };
@@ -264,7 +265,7 @@ export default function LatexEditor({
     }
   };
 
-  // 캐럿 직전의 "\prefix" 를 찾는다 — "\\"(줄바꿈 명령) 뒤에서는 열지 않음
+  // find the "\prefix" right before the caret — do not open after "\\" (the line-break command)
   const detectMenu = (val: string, caret: number) => {
     const upto = val.slice(Math.max(0, caret - 30), caret);
     const m = /\\([a-zA-Z]*)$/.exec(upto);
@@ -328,7 +329,7 @@ export default function LatexEditor({
     const ta = textareaRef.current;
     if (!ta) return;
     onSelectionChange?.(ta.selectionStart ?? 0, ta.selectionEnd ?? 0);
-    // 캐럿이 메뉴 트리거 위치를 벗어나면 닫는다
+    // close the menu when the caret moves away from the trigger position
     if (menu.open) {
       const hit = detectMenu(ta.value, ta.selectionStart ?? 0);
       if (!hit || hit.start !== menu.start) setMenu(MENU_CLOSED);
@@ -369,7 +370,7 @@ export default function LatexEditor({
         style={{ WebkitTextFillColor: "transparent", color: "transparent", caretColor: "#10131a" }}
         className={`absolute inset-0 block h-full w-full resize-none bg-transparent outline-none selection:bg-accent/20 ${TYPO}`}
       />
-      {/* 명령 자동완성 메뉴 */}
+      {/* command autocomplete menu */}
       {menu.open && (
         <div
           data-testid="cmd-menu"
@@ -381,7 +382,7 @@ export default function LatexEditor({
               key={c.insert}
               data-testid="cmd-item"
               onMouseDown={(e) => {
-                e.preventDefault(); // blur 로 메뉴가 닫히기 전에 적용
+                e.preventDefault(); // apply before blur closes the menu
                 applyCommand(c);
               }}
               onMouseEnter={() => setMenu((m) => ({ ...m, sel: i }))}
@@ -397,7 +398,7 @@ export default function LatexEditor({
             </button>
           ))}
           <p className="border-t border-black/5 px-3.5 py-1.5 text-[10px] text-ink/35">
-            ↑↓ 이동 · Enter 선택 · Esc 닫기
+            ↑↓ Navigate · Enter Select · Esc Close
           </p>
         </div>
       )}

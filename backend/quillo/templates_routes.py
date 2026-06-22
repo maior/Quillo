@@ -1,7 +1,8 @@
-"""저널·학회 LaTeX 템플릿 라이브러리.
+"""Journal and conference LaTeX template library.
 
-템플릿은 seed_data/templates/ 의 파일이 원천이다 (manifest.json + 골격 .tex + 동봉 .cls).
-모든 템플릿은 테스트에서 실컴파일이 검증된다 — 적용 즉시 동작이 보장된 것만 노출.
+The templates are sourced from the files in seed_data/templates/ (manifest.json +
+skeleton .tex + bundled .cls). Every template is verified to actually compile in the
+tests — only those guaranteed to work right after applying are exposed.
 """
 from __future__ import annotations
 
@@ -35,12 +36,12 @@ def _read(name: str) -> str:
 def _find(key: str) -> dict:
     tpl = next((t for t in _manifest() if t["key"] == key), None)
     if tpl is None:
-        raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail="Template not found")
     return tpl
 
 
 def _template_files(tpl: dict) -> list[tuple[str, str]]:
-    """(논리 path, content) 목록 — main.tex + 동봉 파일."""
+    """List of (logical path, content) — main.tex + bundled files."""
     files = [("main.tex", _read(tpl["main"]))]
     for extra in tpl.get("extra_files", []):
         files.append((extra["path"], _read(extra["src"])))
@@ -52,7 +53,7 @@ class TemplateOut(BaseModel):
     name: str
     publisher: str
     kind: str
-    columns: int  # 1=1단, 2=2단 — 목록에서 레이아웃 구분용
+    columns: int  # 1=single column, 2=two column — to distinguish layout in the list
     description: str
 
 
@@ -63,7 +64,7 @@ def list_templates(user: models.User = Depends(get_current_user)) -> list[dict]:
 
 @router.post("/templates/{key}/preview")
 def preview_template(key: str, user: models.User = Depends(get_current_user)):
-    """템플릿 골격을 즉석 컴파일해 조판된 PDF 를 보여준다."""
+    """Compile the template skeleton on the fly and show the typeset PDF."""
     import shutil
     import subprocess
     import tempfile
@@ -71,7 +72,7 @@ def preview_template(key: str, user: models.User = Depends(get_current_user)):
     from .papers_routes import _TEX_ENGINE
 
     if _TEX_ENGINE is None:
-        raise HTTPException(status_code=503, detail="서버에 LaTeX 가 설치되어 있지 않습니다")
+        raise HTTPException(status_code=503, detail="LaTeX is not installed on the server")
     tpl = _find(key)
     with tempfile.TemporaryDirectory() as tmp:
         for path, content in _template_files(tpl):
@@ -84,12 +85,12 @@ def preview_template(key: str, user: models.User = Depends(get_current_user)):
             try:
                 proc = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=60)
             except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=422, detail="컴파일이 60초를 초과했습니다")
+                raise HTTPException(status_code=422, detail="Compilation exceeded 60 seconds")
             if proc.returncode != 0:
                 raise HTTPException(status_code=422, detail=proc.stdout[-2000:])
         pdf = os.path.join(tmp, "main.pdf")
         if not os.path.exists(pdf):
-            raise HTTPException(status_code=422, detail="PDF 생성 실패")
+            raise HTTPException(status_code=422, detail="PDF generation failed")
         from fastapi.responses import Response
 
         with open(pdf, "rb") as fh:
@@ -107,12 +108,12 @@ def apply_template(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> dict:
-    """main.tex 를 템플릿 골격으로 교체하고 동봉 파일(.cls 등)을 프로젝트에 복사한다."""
+    """Replace main.tex with the template skeleton and copy bundled files (.cls, etc.) into the project."""
     from .papers_routes import _get_paper_or_404, _lock_holder
 
     paper = _get_paper_or_404(db, paper_ref, user)
     if _lock_holder(paper) != user.id:
-        raise HTTPException(status_code=423, detail="편집 잠금을 먼저 획득해야 합니다")
+        raise HTTPException(status_code=423, detail="You must acquire the edit lock first")
 
     tpl = _find(body.key)
     for path, content in _template_files(tpl):

@@ -8,10 +8,10 @@ import { authApi, authFetch } from "@/lib/api";
 
 interface PaperMeta {
   id: number;
-  key: string; // 외부 노출용 해시 키 — URL 은 순번 id 대신 이 키
+  key: string; // externally exposed hash key — the URL uses this key instead of the sequential id
   owner_name: string;
   mine: boolean;
-  shared: boolean; // 초대받아 접근
+  shared: boolean; // accessed via invitation
   title: string;
   status: string;
   journal: string;
@@ -23,10 +23,10 @@ interface PaperMeta {
 }
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
-  draft: { label: "초안", cls: "bg-gray-100 text-ink/60" },
-  submitted: { label: "투고", cls: "bg-accent/10 text-accent" },
-  revision: { label: "리비전", cls: "bg-amber-50 text-amber-600" },
-  published: { label: "게재", cls: "bg-emerald-50 text-emerald-600" },
+  draft: { label: "Draft", cls: "bg-gray-100 text-ink/60" },
+  submitted: { label: "Submitted", cls: "bg-accent/10 text-accent" },
+  revision: { label: "Revision", cls: "bg-amber-50 text-amber-600" },
+  published: { label: "Published", cls: "bg-emerald-50 text-emerald-600" },
 };
 
 export default function PapersPage() {
@@ -80,42 +80,42 @@ export default function PapersPage() {
             Paper Workspace
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-white/60">
-            진행 중인 원고를 함께 관리하는 공간입니다. 편집 잠금으로 한 번에 한
-            명씩 안전하게 작성합니다.
+            A space to manage your in-progress manuscripts together. Edit locks let one person
+            write safely at a time.
           </p>
         </div>
       </section>
 
       <section className="bg-gray-50/70 py-14">
         <div className="container-x max-w-4xl">
-          {/* 새 원고 */}
+          {/* new manuscript */}
           {creating ? (
             <form onSubmit={create} className="flex gap-3 rounded-2xl border border-black/5 bg-white p-4 shadow-card">
               <input
                 autoFocus
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="원고 제목"
+                placeholder="Manuscript title"
                 className="flex-1 rounded-xl border border-black/10 px-4 py-2.5 text-sm outline-none focus:border-accent"
               />
               <button type="submit" className="btn-primary !px-5 !py-2 text-sm">
-                만들기
+                Create
               </button>
               <button
                 type="button"
                 onClick={() => setCreating(false)}
                 className="btn rounded-full border border-black/10 px-5 text-sm text-ink/60"
               >
-                취소
+                Cancel
               </button>
             </form>
           ) : (
             <button onClick={() => setCreating(true)} className="btn-primary">
-              <Plus size={15} /> 새 원고
+              <Plus size={15} /> New manuscript
             </button>
           )}
 
-          {/* 목록 */}
+          {/* list */}
           <div className="mt-8 space-y-3">
             {papers === null ? (
               <div className="py-16 text-center">
@@ -125,7 +125,7 @@ export default function PapersPage() {
               <div className="rounded-2xl border border-dashed border-black/10 bg-white px-6 py-16 text-center">
                 <FileText size={26} className="mx-auto text-accent" />
                 <p className="mt-4 text-sm text-ink/50">
-                  아직 원고가 없습니다. 첫 원고를 만들면 이곳에 표시됩니다.
+                  No manuscripts yet. Once you create your first one, it will appear here.
                 </p>
               </div>
             ) : (
@@ -149,19 +149,19 @@ export default function PapersPage() {
                               data-testid="shared-badge"
                               className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent"
                             >
-                              공유받음
+                              Shared with you
                             </span>
                           )}
                           {p.locked && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
                               <Lock size={11} />
-                              {p.lock_mine ? "내가 편집 중" : `${p.lock_user_name} 편집 중`}
+                              {p.lock_mine ? "You are editing" : `${p.lock_user_name} is editing`}
                             </span>
                           )}
                         </div>
                         <p className="mt-2 truncate font-display font-semibold text-ink">{p.title}</p>
                         <p className="mt-1 text-xs text-ink/40">
-                          {`최근 수정: ${p.updated_by} · ${p.updated_at.slice(0, 10)}`}
+                          {`Last edited: ${p.updated_by} · ${p.updated_at.slice(0, 10)}`}
                         </p>
                       </div>
                     </Link>
@@ -178,7 +178,7 @@ export default function PapersPage() {
                 );
                 const mine = papers.filter((p) => p.mine);
                 const shared = papers.filter((p) => p.shared);
-                // admin 열람분 — 소유자별 그룹 (일반 멤버에게는 없음)
+                // admin-visible items — grouped by owner (not shown to regular members)
                 const others = papers.filter((p) => !p.mine && !p.shared);
                 const byOwner = new Map<string, PaperMeta[]>();
                 for (const p of others) byOwner.set(p.owner_name, [...(byOwner.get(p.owner_name) ?? []), p]);
@@ -186,19 +186,19 @@ export default function PapersPage() {
                   <>
                     {mine.length > 0 && (
                       <div className="space-y-3">
-                        {heading("내 원고", mine.length)}
+                        {heading("My manuscripts", mine.length)}
                         {mine.map(card)}
                       </div>
                     )}
                     {shared.length > 0 && (
                       <div className="space-y-3">
-                        {heading("공유받은 원고", shared.length)}
+                        {heading("Shared with me", shared.length)}
                         {shared.map(card)}
                       </div>
                     )}
                     {byOwner.size > 0 && (
                       <div className="space-y-3">
-                        {heading("멤버 원고 (관리자 열람)", others.length)}
+                        {heading("Member manuscripts (admin view)", others.length)}
                         {[...byOwner.entries()].map(([owner, list]) => (
                           <div key={owner} data-testid="owner-group" className="space-y-3">
                             <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-ink/40">

@@ -1,4 +1,4 @@
-"""격리된 인메모리 SQLite로 Quillo API 테스트 클라이언트 구성."""
+"""Configure the Quillo API test client with an isolated in-memory SQLite database."""
 from __future__ import annotations
 
 import pytest

@@ -227,7 +227,7 @@ app.dependency_overrides[get_db] = host_get_db
 Base.metadata.create_all(bind=host_engine)   # creates paper_* tables in the host DB
 ```
 
-> `papers_routes` queries `models.User` directly for collaborator/owner lookups, so full embedding requires reconciling the host's user table (or injecting a user lookup). See `.claude/CLAUDE.md` for the cutover notes.
+> `papers_routes` queries `models.User` directly for collaborator/owner lookups, so full embedding requires reconciling the host's user table (or injecting a user lookup).
 
 ---
 

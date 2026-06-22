@@ -4,26 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 /**
- * LaTeX 도구 모음 — 자주 쓰는 구조(첨자·분수·합·적분·수식·그림·표)와
- * 그리스 문자·수학 기호 팔레트. 선택 영역이 있으면 감싸고, 없으면 커서를
- * 입력 위치로 보낸다.
+ * LaTeX toolbar — common structures (sub/superscripts, fractions, sums, integrals,
+ * equations, figures, tables) plus Greek-letter and math-symbol palettes. If there is a
+ * selection it wraps it, otherwise it moves the cursor to the insertion point.
  */
 
 export type InsertFn = (before: string, after?: string, placeholder?: string) => void;
 
 const STRUCTURES: { label: string; title: string; before: string; after?: string; placeholder?: string }[] = [
-  { label: "x₂", title: "아래첨자", before: "_{", after: "}" },
-  { label: "x²", title: "위첨자", before: "^{", after: "}" },
-  { label: "a/b", title: "분수", before: "\\frac{", after: "}{}" },
-  { label: "√", title: "제곱근", before: "\\sqrt{", after: "}" },
-  { label: "Σ", title: "합(시그마)", before: "\\sum_{i=1}^{n} " },
-  { label: "∫", title: "적분", before: "\\int_{0}^{t} " },
-  { label: "$x$", title: "인라인 수식", before: "$", after: "$" },
-  { label: "[≡]", title: "수식 블록 (equation)", before: "\\begin{equation}\n  ", after: "\n\\end{equation}" },
-  { label: "🖼", title: "그림 삽입 골격", before: "\\begin{figure}[ht]\n  \\centering\n  \\includegraphics[width=\\linewidth]{", after: "}\n  \\caption{}\n  \\label{fig:}\n\\end{figure}", placeholder: "figures/" },
-  { label: "⊞", title: "표 골격", before: "\\begin{table}[ht]\n  \\centering\n  \\caption{}\n  \\begin{tabular}{lcc}\n    \\hline\n    ", after: " &  &  \\\\\n    \\hline\n  \\end{tabular}\n\\end{table}" },
-  { label: "[1]", title: "인용", before: "\\cite{", after: "}" },
-  { label: "§→", title: "상호참조", before: "\\ref{", after: "}" },
+  { label: "x₂", title: "Subscript", before: "_{", after: "}" },
+  { label: "x²", title: "Superscript", before: "^{", after: "}" },
+  { label: "a/b", title: "Fraction", before: "\\frac{", after: "}{}" },
+  { label: "√", title: "Square root", before: "\\sqrt{", after: "}" },
+  { label: "Σ", title: "Sum (sigma)", before: "\\sum_{i=1}^{n} " },
+  { label: "∫", title: "Integral", before: "\\int_{0}^{t} " },
+  { label: "$x$", title: "Inline math", before: "$", after: "$" },
+  { label: "[≡]", title: "Equation block", before: "\\begin{equation}\n  ", after: "\n\\end{equation}" },
+  { label: "🖼", title: "Figure skeleton", before: "\\begin{figure}[ht]\n  \\centering\n  \\includegraphics[width=\\linewidth]{", after: "}\n  \\caption{}\n  \\label{fig:}\n\\end{figure}", placeholder: "figures/" },
+  { label: "⊞", title: "Table skeleton", before: "\\begin{table}[ht]\n  \\centering\n  \\caption{}\n  \\begin{tabular}{lcc}\n    \\hline\n    ", after: " &  &  \\\\\n    \\hline\n  \\end{tabular}\n\\end{table}" },
+  { label: "[1]", title: "Citation", before: "\\cite{", after: "}" },
+  { label: "§→", title: "Cross-reference", before: "\\ref{", after: "}" },
 ];
 
 const GREEK: [string, string][] = [
@@ -124,8 +124,8 @@ export default function LatexToolbar({ onInsert }: { onInsert: InsertFn }) {
         </button>
       ))}
       <span className="mx-1.5 h-4 w-px bg-black/10" />
-      <Palette title="αβ" ariaLabel="그리스 문자" items={GREEK} onPick={(cmd) => onInsert(`${cmd} `)} />
-      <Palette title="≤±" ariaLabel="수학 기호" items={SYMBOLS} onPick={(cmd) => onInsert(`${cmd} `)} />
+      <Palette title="αβ" ariaLabel="Greek letters" items={GREEK} onPick={(cmd) => onInsert(`${cmd} `)} />
+      <Palette title="≤±" ariaLabel="Math symbols" items={SYMBOLS} onPick={(cmd) => onInsert(`${cmd} `)} />
     </div>
   );
 }

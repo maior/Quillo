@@ -1,4 +1,4 @@
-// Quillo 백엔드(FastAPI :8675) API 클라이언트.
+// Quillo backend (FastAPI :8675) API client.
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8675";
 
@@ -9,7 +9,7 @@ export interface AuthUser {
   role: "admin" | "member";
 }
 
-/** 인증 호출 — 세션 쿠키 포함, 클라이언트 컴포넌트 전용. */
+/** Authenticated request — includes the session cookie, client components only. */
 export async function authFetch<T>(
   path: string,
   init?: RequestInit & { json?: unknown },

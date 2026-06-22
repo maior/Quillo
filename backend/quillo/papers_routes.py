@@ -1,7 +1,7 @@
-"""Paper Workspace — 잠금(check-out) 기반 단순 공동 집필.
+"""Paper Workspace — simple collaborative authoring based on lock (check-out).
 
-동시 편집 충돌을 막기 위해 한 번에 한 명만 편집한다:
-lock 획득 → 본문 저장(보유자만) → unlock. 잠금은 30분 후 자동 만료된다.
+To prevent concurrent-edit conflicts, only one person edits at a time:
+acquire lock → save content (holder only) → unlock. Locks auto-expire after 30 minutes.
 """
 from __future__ import annotations
 
@@ -33,14 +33,14 @@ def _lock_expired(paper: models.Paper) -> bool:
 
 
 def _lock_holder(paper: models.Paper) -> int:
-    """유효한 잠금 보유자 user_id. 없거나 만료면 0."""
+    """user_id of the valid lock holder. 0 if none or expired."""
     if paper.lock_user_id and not _lock_expired(paper):
         return paper.lock_user_id
     return 0
 
 
 def _new_paper_key(db: Session) -> str:
-    """외부 노출용 불투명 키 (11자 url-safe). 전부 숫자면 id 와 모호하므로 재생성."""
+    """Opaque key for external exposure (11-char url-safe). If all digits, ambiguous with id, so regenerate."""
     while True:
         key = secrets.token_urlsafe(8)
         if key.isdigit():
@@ -50,7 +50,7 @@ def _new_paper_key(db: Session) -> str:
 
 
 def _resolve_paper(db: Session, ref: str) -> models.Paper | None:
-    """해시 키 우선 해석, 숫자는 id 폴백 (기존 내부 호환)."""
+    """Resolve hash key first, fall back to numeric id (for existing internal compatibility)."""
     paper = db.scalar(select(models.Paper).where(models.Paper.key == ref))
     if paper is None and ref.isdigit():
         paper = db.get(models.Paper, int(ref))
@@ -70,14 +70,14 @@ def _is_collaborator(db: Session, paper_id: int, user_id: int) -> bool:
 
 
 def _can_access(db: Session, paper: models.Paper, user: models.User) -> bool:
-    """소유자·초대된 협업자·admin 만. owner_id=0(구버전 미지정)은 전체 공개로 동작."""
+    """Owner, invited collaborators, and admin only. owner_id=0 (legacy unset) acts as fully public."""
     if user.role == "admin" or paper.owner_id in (0, user.id):
         return True
     return _is_collaborator(db, paper.id, user.id)
 
 
 def _get_paper_or_404(db: Session, ref: str, user: models.User) -> models.Paper:
-    """접근 권한까지 검사 — 권한 없으면 존재를 드러내지 않고 404."""
+    """Also checks access permission — returns 404 without revealing existence if unauthorized."""
     paper = _resolve_paper(db, ref)
     if paper is None or not _can_access(db, paper, user):
         raise HTTPException(status_code=404, detail="Not found")
@@ -98,8 +98,8 @@ class PaperMeta(BaseModel):
     status: str
     journal: str
     owner_name: str
-    mine: bool  # 내가 소유자
-    shared: bool  # 초대받아 접근 (소유자 아님)
+    mine: bool  # I am the owner
+    shared: bool  # accessed via invitation (not the owner)
     updated_by: str
     updated_at: str
     lock_user_name: str
@@ -110,21 +110,21 @@ class PaperMeta(BaseModel):
 class PaperOut(PaperMeta):
     content: str
     created_by: str
-    # 외부 도구가 루트 응답만 보고도 사용법을 찾아갈 수 있도록 진입점을 노출
+    # Expose entry points so external tools can find usage from the root response alone
     guide: str = ""
     instructions: str = ""
 
 
 def _full(db: Session, p: models.Paper, user: models.User) -> dict:
-    """PaperOut 응답 — 메타 + 본문 + guide 진입점 안내."""
+    """PaperOut response — meta + content + guide entry point."""
     return {
         **_meta(db, p, user),
         "content": p.content,
         "created_by": p.created_by,
         "guide": f"/api/papers/{p.key}/guide",
         "instructions": (
-            f"사용법은 GET /api/papers/{p.key}/guide (마크다운) 를 먼저 읽으세요. "
-            "읽기는 자유, 쓰기는 POST .../lock 으로 편집 잠금을 먼저 획득해야 합니다(미획득 시 423)."
+            f"For usage, first read GET /api/papers/{p.key}/guide (markdown). "
+            "Reading is open; writing requires acquiring an edit lock first via POST .../lock (otherwise 423)."
         ),
     }
 
@@ -153,7 +153,7 @@ def _meta(db: Session, p: models.Paper, user: models.User) -> dict:
 def list_papers(
     db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
 ) -> list[dict]:
-    """접근 가능한 원고만 — 내 것·초대받은 것·(admin 은 전체)."""
+    """Accessible manuscripts only — mine, those I'm invited to, (admin sees all)."""
     papers = db.scalars(select(models.Paper).order_by(models.Paper.id.desc()))
     return [_meta(db, p, user) for p in papers if _can_access(db, p, user)]
 
@@ -165,7 +165,7 @@ def create_paper(
     user: models.User = Depends(get_current_user),
 ) -> dict:
     if not (body.title and body.title.strip()):
-        raise HTTPException(status_code=422, detail="제목을 입력해 주세요")
+        raise HTTPException(status_code=422, detail="Please enter a title")
     paper = models.Paper(
         key=_new_paper_key(db),
         owner_id=user.id,
@@ -179,7 +179,7 @@ def create_paper(
     )
     db.add(paper)
     db.commit()
-    # 기본 LaTeX 골격 — 모든 프로젝트는 main.tex 에서 시작한다
+    # Default LaTeX skeleton — every project starts from main.tex
     db.add(
         models.PaperFile(
             paper_id=paper.id,
@@ -212,17 +212,17 @@ def update_paper(
     paper = _get_paper_or_404(db, paper_ref, user)
 
     data = body.model_dump(exclude_unset=True)
-    # 본문 변경은 잠금 보유자만 — 423 Locked
+    # Only the lock holder may change content — 423 Locked
     if "content" in data and _lock_holder(paper) != user.id:
-        raise HTTPException(status_code=423, detail="편집 잠금을 먼저 획득해야 합니다")
+        raise HTTPException(status_code=423, detail="You must acquire the edit lock first")
     if "status" in data and data["status"] not in _STATUSES:
-        raise HTTPException(status_code=422, detail="status 값이 올바르지 않습니다")
+        raise HTTPException(status_code=422, detail="Invalid status value")
     for key in ("title", "status", "journal", "content"):
         if key in data and data[key] is not None:
             setattr(paper, key, data[key])
     paper.updated_by = user.name or user.email
     paper.updated_at = _now()
-    # 저장 시 잠금 TTL 갱신 (작업 중 만료 방지)
+    # Refresh lock TTL on save (prevent expiry mid-work)
     if _lock_holder(paper) == user.id:
         paper.locked_at = _now()
     db.commit()
@@ -239,7 +239,7 @@ def lock_paper(
     holder = _lock_holder(paper)
     if holder and holder != user.id:
         raise HTTPException(
-            status_code=409, detail=f"{paper.lock_user_name}님이 편집 중입니다"
+            status_code=409, detail=f"{paper.lock_user_name} is currently editing"
         )
     paper.lock_user_id = user.id
     paper.lock_user_name = user.name or user.email
@@ -257,7 +257,7 @@ def unlock_paper(
     paper = _get_paper_or_404(db, paper_ref, user)
     holder = _lock_holder(paper)
     if holder and holder != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="잠금 보유자 또는 관리자만 해제할 수 있습니다")
+        raise HTTPException(status_code=403, detail="Only the lock holder or an administrator can release it")
     paper.lock_user_id = 0
     paper.lock_user_name = ""
     paper.locked_at = ""
@@ -273,8 +273,8 @@ def delete_paper(
 ) -> dict:
     paper = _get_paper_or_404(db, paper_ref, user)
     if paper.owner_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="소유자 또는 관리자만 삭제할 수 있습니다")
-    # 파일·초대도 함께 삭제 — 고아 행이 남으면 id 재사용 시 새 논문이 옛 데이터를 상속한다
+        raise HTTPException(status_code=403, detail="Only the owner or an administrator can delete it")
+    # Delete files and invitations too — orphan rows would let a new paper inherit old data on id reuse
     for f in db.scalars(
         select(models.PaperFile).where(models.PaperFile.paper_id == paper.id)
     ):
@@ -297,7 +297,7 @@ def delete_paper(
 
 
 # ─────────────────────────────────────────────────────────
-# 공유·편집 초대 — 소유자가 멤버를 초대하면 그 멤버만 공동 편집
+# Share / edit invitations — once the owner invites a member, only that member co-edits
 # ─────────────────────────────────────────────────────────
 
 
@@ -324,7 +324,7 @@ def list_collaborators(
         collaborators.append(
             {
                 "user_id": c.user_id,
-                "name": (u.name or u.email) if u else "(탈퇴한 사용자)",
+                "name": (u.name or u.email) if u else "(deactivated user)",
                 "email": u.email if u else "",
                 "invited_at": c.invited_at,
             }
@@ -348,14 +348,14 @@ def invite_collaborator(
 ) -> dict:
     paper = _get_paper_or_404(db, paper_ref, user)
     if paper.owner_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="소유자만 초대할 수 있습니다")
+        raise HTTPException(status_code=403, detail="Only the owner can invite")
     target = db.scalar(select(models.User).where(models.User.email == body.email.strip()))
     if target is None or target.status != "active":
-        raise HTTPException(status_code=404, detail="해당 이메일의 활성 멤버가 없습니다")
+        raise HTTPException(status_code=404, detail="No active member with that email")
     if target.id == paper.owner_id:
-        raise HTTPException(status_code=409, detail="소유자는 초대할 필요가 없습니다")
+        raise HTTPException(status_code=409, detail="The owner does not need to be invited")
     if _is_collaborator(db, paper.id, target.id):
-        raise HTTPException(status_code=409, detail="이미 초대된 멤버입니다")
+        raise HTTPException(status_code=409, detail="This member is already invited")
     db.add(
         models.PaperCollaborator(paper_id=paper.id, user_id=target.id, invited_at=_now())
     )
@@ -370,10 +370,10 @@ def remove_collaborator(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> dict:
-    """소유자·admin 은 초대 철회, 협업자 본인은 스스로 나가기."""
+    """Owner/admin can revoke the invitation; a collaborator can remove themselves."""
     paper = _get_paper_or_404(db, paper_ref, user)
     if not (user.role == "admin" or paper.owner_id == user.id or user.id == user_id):
-        raise HTTPException(status_code=403, detail="소유자 또는 본인만 해제할 수 있습니다")
+        raise HTTPException(status_code=403, detail="Only the owner or the member themselves can remove this")
     row = db.scalar(
         select(models.PaperCollaborator).where(
             models.PaperCollaborator.paper_id == paper.id,
@@ -381,15 +381,15 @@ def remove_collaborator(
         )
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="초대 내역이 없습니다")
+        raise HTTPException(status_code=404, detail="No such invitation")
     db.delete(row)
     db.commit()
     return {"removed": user_id}
 
 
 # ─────────────────────────────────────────────────────────
-# 파일 트리 — LaTeX 프로젝트 구조 (text/.bib, 이미지, 폴더)
-# 모든 쓰기 작업은 paper 잠금 보유자만 가능하다.
+# File tree — LaTeX project structure (text/.bib, images, folders)
+# All write operations are restricted to the paper's lock holder.
 # ─────────────────────────────────────────────────────────
 
 import io
@@ -405,7 +405,7 @@ PAPER_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "uploads", "papers"
 )
 _IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".eps"}
-_PATH_SEGMENT = re.compile(r"^[\w.\-가-힣 ]+$")
+_PATH_SEGMENT = re.compile(r"^[\w.\- ]+$")  # \w already matches Unicode letters (incl. CJK)
 
 MAIN_TEX_TEMPLATE = """\\documentclass{article}
 \\usepackage{graphicx}
@@ -425,16 +425,16 @@ MAIN_TEX_TEMPLATE = """\\documentclass{article}
 def _normalize_path(path: str) -> str:
     raw = (path or "").strip()
     if raw.startswith("/"):
-        raise HTTPException(status_code=422, detail="경로가 올바르지 않습니다")
+        raise HTTPException(status_code=422, detail="Invalid path")
     segments = [seg for seg in raw.strip("/").split("/")]
     if not segments or any(not seg or seg == ".." or not _PATH_SEGMENT.match(seg) for seg in segments):
-        raise HTTPException(status_code=422, detail="경로가 올바르지 않습니다")
+        raise HTTPException(status_code=422, detail="Invalid path")
     return "/".join(segments)
 
 
 def _require_lock(paper: models.Paper, user: models.User) -> None:
     if _lock_holder(paper) != user.id:
-        raise HTTPException(status_code=423, detail="편집 잠금을 먼저 획득해야 합니다")
+        raise HTTPException(status_code=423, detail="You must acquire the edit lock first")
 
 
 class FileIn(BaseModel):
@@ -490,7 +490,7 @@ def create_file(
         )
     )
     if exists:
-        raise HTTPException(status_code=409, detail="같은 경로의 파일이 이미 있습니다")
+        raise HTTPException(status_code=409, detail="A file already exists at this path")
     f = models.PaperFile(paper_id=paper.id, path=path, kind=kind, content=body.content or "")
     db.add(f)
     db.commit()
@@ -529,17 +529,17 @@ def update_file(
     if body.path is not None:
         new_path = _normalize_path(body.path)
         if new_path != f.path:
-            # 대상 경로 점유 시 409 — 이동/이름변경이 기존 파일을 덮어쓰지 않는다
+            # 409 if target path is occupied — move/rename must not overwrite an existing file
             if db.scalar(
                 select(models.PaperFile).where(
                     models.PaperFile.paper_id == paper.id, models.PaperFile.path == new_path
                 )
             ):
-                raise HTTPException(status_code=409, detail="같은 경로의 파일이 이미 있습니다")
+                raise HTTPException(status_code=409, detail="A file already exists at this path")
             if f.kind == "folder":
-                # 자기 자신/하위로 이동 금지 + 하위 파일 경로 동반 변경
+                # Forbid moving into self/descendant + cascade child file paths
                 if new_path == f.path or new_path.startswith(f.path + "/"):
-                    raise HTTPException(status_code=422, detail="폴더를 자기 하위로 옮길 수 없습니다")
+                    raise HTTPException(status_code=422, detail="Cannot move a folder into its own descendant")
                 old_prefix = f.path + "/"
                 for child in db.scalars(
                     select(models.PaperFile).where(
@@ -551,7 +551,7 @@ def update_file(
             f.path = new_path
     paper.updated_by = user.name or user.email
     paper.updated_at = _now()
-    paper.locked_at = _now()  # 작업 중 잠금 연장
+    paper.locked_at = _now()  # extend lock during work
     db.commit()
     return {**_file_out(f), "content": f.content}
 
@@ -579,7 +579,7 @@ def delete_file(
         for child in children:
             removed_ids.append(child.id)
             db.delete(child)
-    # 코멘트도 함께 삭제 — 고아 행 방지
+    # Delete comments too — prevent orphan rows
     for cm in db.scalars(
         select(models.PaperComment).where(models.PaperComment.file_id.in_(removed_ids))
     ):
@@ -604,18 +604,18 @@ async def upload_paper_file(
     if ext not in _IMAGE_EXT:
         raise HTTPException(
             status_code=422,
-            detail=f"이미지/그림 파일만 업로드할 수 있습니다 ({', '.join(sorted(_IMAGE_EXT))})",
+            detail=f"Only image/figure files can be uploaded ({', '.join(sorted(_IMAGE_EXT))})",
         )
     data = await file.read()
     if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=422, detail="20MB 이하 파일만 업로드할 수 있습니다")
+        raise HTTPException(status_code=422, detail="Only files up to 20MB can be uploaded")
     logical = _normalize_path(f"{folder}/{name}" if folder else name)
     if db.scalar(
         select(models.PaperFile).where(
             models.PaperFile.paper_id == paper.id, models.PaperFile.path == logical
         )
     ):
-        raise HTTPException(status_code=409, detail="같은 경로의 파일이 이미 있습니다")
+        raise HTTPException(status_code=409, detail="A file already exists at this path")
 
     store_dir = os.path.join(PAPER_UPLOAD_DIR, str(paper.id))
     os.makedirs(store_dir, exist_ok=True)
@@ -640,7 +640,7 @@ def export_zip(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """프로젝트 전체를 폴더 구조 그대로 ZIP 으로 — 로컬/Overleaf 에서 바로 컴파일."""
+    """ZIP the entire project preserving folder structure — compile directly in local/Overleaf."""
     paper = _get_paper_or_404(db, paper_ref, user)
     files = list(
         db.scalars(select(models.PaperFile).where(models.PaperFile.paper_id == paper.id))
@@ -656,7 +656,7 @@ def export_zip(
                 if os.path.exists(disk):
                     zf.write(disk, f.path)
     buf.seek(0)
-    # Content-Disposition 은 latin-1 만 허용 — ASCII 로 한정
+    # Content-Disposition allows latin-1 only — restrict to ASCII
     safe = re.sub(r"[^A-Za-z0-9\-]+", "_", paper.title).strip("_")[:40] or "paper"
     return StreamingResponse(
         buf,
@@ -666,7 +666,7 @@ def export_zip(
 
 
 # ─────────────────────────────────────────────────────────
-# 리뷰 코멘트 — 선택 구간(quote)에 단다. 잠금 불필요(편집 중에도 리뷰 가능)
+# Review comments — attached to a selected span (quote). No lock needed (review even while editing)
 # ─────────────────────────────────────────────────────────
 
 
@@ -718,10 +718,10 @@ def create_comment(
 ) -> dict:
     paper = _get_paper_or_404(db, paper_ref, user)
     if not body.body.strip():
-        raise HTTPException(status_code=422, detail="코멘트 내용을 입력해 주세요")
+        raise HTTPException(status_code=422, detail="Please enter comment content")
     f = db.get(models.PaperFile, body.file_id)
     if f is None or f.paper_id != paper.id:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail="File not found")
     c = models.PaperComment(
         paper_id=paper.id,
         file_id=body.file_id,
@@ -751,7 +751,7 @@ def update_comment(
     if c is None or c.paper_id != paper.id:
         raise HTTPException(status_code=404, detail="Not found")
     if body.status not in ("open", "resolved"):
-        raise HTTPException(status_code=422, detail="status 는 open 또는 resolved")
+        raise HTTPException(status_code=422, detail="status must be open or resolved")
     c.status = body.status
     db.commit()
     return _comment_out(c)
@@ -764,27 +764,27 @@ def delete_comment(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> dict:
-    """작성자 본인·원고 소유자·admin 만 삭제."""
+    """Only the author, the manuscript owner, or an admin can delete."""
     paper = _get_paper_or_404(db, paper_ref, user)
     c = db.get(models.PaperComment, comment_id)
     if c is None or c.paper_id != paper.id:
         raise HTTPException(status_code=404, detail="Not found")
     if user.id not in (c.author_id, paper.owner_id) and user.role != "admin":
-        raise HTTPException(status_code=403, detail="작성자 또는 소유자만 삭제할 수 있습니다")
+        raise HTTPException(status_code=403, detail="Only the author or the owner can delete it")
     db.delete(c)
     db.commit()
     return {"status": "deleted"}
 
 
 # ─────────────────────────────────────────────────────────
-# 버전 히스토리 — 컴파일 시점에 변경된 텍스트 파일을 스냅샷
+# Version history — snapshot changed text files at compile time
 # ─────────────────────────────────────────────────────────
 
 import difflib
 
 
 def _record_revisions(db: Session, paper: models.Paper, user: models.User) -> int:
-    """직전 스냅샷과 내용이 다른 텍스트 파일만 리비전으로 기록한다."""
+    """Record a revision only for text files whose content differs from the previous snapshot."""
     files = db.scalars(
         select(models.PaperFile).where(
             models.PaperFile.paper_id == paper.id, models.PaperFile.kind == "text"
@@ -817,7 +817,7 @@ def _record_revisions(db: Session, paper: models.Paper, user: models.User) -> in
 
 
 def _diff_lines(old: str, new: str) -> list[dict]:
-    """줄 단위 diff — op: ' '(유지) '+'(추가) '-'(삭제)."""
+    """Line-level diff — op: ' ' (kept) '+' (added) '-' (removed)."""
     out = []
     for line in difflib.ndiff(old.splitlines(), new.splitlines()):
         if line.startswith("? "):
@@ -832,7 +832,7 @@ def list_history(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> list[dict]:
-    """리비전 목록 (최신순) — 직전 스냅샷 대비 ±줄 수 포함."""
+    """Revision list (newest first) — includes ± line counts vs. the previous snapshot."""
     paper = _get_paper_or_404(db, paper_ref, user)
     revs = list(
         db.scalars(
@@ -869,7 +869,7 @@ def revision_detail(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> dict:
-    """리비전 상세 — 직전 스냅샷 대비 줄 단위 diff."""
+    """Revision detail — line-level diff vs. the previous snapshot."""
     paper = _get_paper_or_404(db, paper_ref, user)
     rev = db.get(models.PaperRevision, rev_id)
     if rev is None or rev.paper_id != paper.id:
@@ -897,14 +897,14 @@ def restore_revision(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> dict:
-    """파일 내용을 해당 리비전으로 되돌린다 — 잠금 보유자만."""
+    """Revert the file content to the given revision — lock holder only."""
     paper = _get_paper_or_404(db, paper_ref, user)
     _require_lock(paper, user)
     rev = db.get(models.PaperRevision, rev_id)
     if rev is None or rev.paper_id != paper.id:
         raise HTTPException(status_code=404, detail="Not found")
     f = db.get(models.PaperFile, rev.file_id)
-    if f is None:  # 파일이 삭제됐으면 같은 경로로 복구
+    if f is None:  # if the file was deleted, restore it at the same path
         f = models.PaperFile(paper_id=paper.id, path=rev.path, kind="text", content=rev.content)
         db.add(f)
     else:
@@ -915,7 +915,7 @@ def restore_revision(
     return {"restored": rev.id, "file_id": f.id}
 
 
-# ── 에이전트용 사용설명서 (self-describing API) ──
+# ── Usage manual for agents (self-describing API) ──
 
 
 @router.get("/{paper_ref}/guide")
@@ -924,65 +924,65 @@ def usage_guide(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """외부 도구(Claude Code 등)가 URL+토큰만 받고도 작업할 수 있도록 — 이 프로젝트 전용 사용법."""
+    """So external tools (Claude Code, etc.) can work with only a URL + token — usage specific to this project."""
     from fastapi.responses import Response
 
     paper = _get_paper_or_404(db, paper_ref, user)
     base = f"/api/papers/{paper.key}"
-    md = f"""# Quillo — 외부 편집 가이드
+    md = f"""# Quillo — External Editing Guide
 
-이 프로젝트: **{paper.title}** (`{base}`)
-인증: 모든 요청에 `Authorization: Bearer <토큰>` 헤더.
+This project: **{paper.title}** (`{base}`)
+Auth: include the `Authorization: Bearer <token>` header on every request.
 
-## 읽기
+## Reading
 
-- `GET {base}` — 논문 메타 (title, status: draft|submitted|revision|published, journal, locked, lock_user_name)
-- `GET {base}/files` — 파일 목록 [{{id, path, kind: text|image|folder}}]
-- `GET {base}/files/{{file_id}}` — 파일 내용 (content)
-- `GET {base}/export` — 프로젝트 전체 ZIP
+- `GET {base}` — paper metadata (title, status: draft|submitted|revision|published, journal, locked, lock_user_name)
+- `GET {base}/files` — file list [{{id, path, kind: text|image|folder}}]
+- `GET {base}/files/{{file_id}}` — file content (content)
+- `GET {base}/export` — full project ZIP
 
-## 쓰기 (잠금 필수)
+## Writing (lock required)
 
-쓰기 전 반드시 잠금을 획득한다. 잠금 없이 쓰면 **423** 으로 거절된다.
-다른 사람이 편집 중이면 lock 이 409 를 반환한다 — 기다리거나 사용자에게 알릴 것.
-잠금은 30분 후 자동 만료되며, 저장할 때마다 연장된다.
+Always acquire the lock before writing. Writing without a lock is rejected with **423**.
+If someone else is editing, lock returns 409 — wait, or notify the user.
+The lock auto-expires after 30 minutes and is extended on every save.
 
 1. `POST {base}/lock`
-2. 수정:
-   - `PUT {base}/files/{{file_id}}` body `{{"content": "..."}}` — 파일 내용 교체
-   - `POST {base}/files` body `{{"path": "sections/intro.tex", "kind": "text", "content": "..."}}` — 새 파일
-   - `DELETE {base}/files/{{file_id}}` — 파일 삭제
-   - `POST {base}/apply-template` body `{{"key": "<템플릿 키>"}}` — main.tex 교체 (`GET /api/templates` 로 26종 목록)
-   - `PUT {base}` body `{{"title"|"status"|"journal": ...}}` — 메타 수정
-3. `POST {base}/compile` — xelatex 컴파일. 성공 시 PDF 바이너리, 실패 시 422 + 오류 로그 (수정 후 재시도)
-   - `?entry=<path>` 로 특정 파일 기준 미리보기: \\documentclass 가 있으면 그 파일을 진입점으로, 없으면(섹션 조각) main.tex 프리앰블을 빌려 조판
-4. `POST {base}/unlock` — 작업이 끝나면 반드시 해제
+2. Edit:
+   - `PUT {base}/files/{{file_id}}` body `{{"content": "..."}}` — replace file content
+   - `POST {base}/files` body `{{"path": "sections/intro.tex", "kind": "text", "content": "..."}}` — new file
+   - `DELETE {base}/files/{{file_id}}` — delete file
+   - `POST {base}/apply-template` body `{{"key": "<template key>"}}` — replace main.tex (`GET /api/templates` lists 26 templates)
+   - `PUT {base}` body `{{"title"|"status"|"journal": ...}}` — edit metadata
+3. `POST {base}/compile` — compile with xelatex. On success, PDF binary; on failure, 422 + error log (fix and retry)
+   - `?entry=<path>` previews based on a specific file: if it has \\documentclass, that file is the entry point; otherwise (a section fragment) it borrows main.tex's preamble to typeset
+4. `POST {base}/unlock` — always release when done
 
-## 버전 히스토리
+## Version History
 
-- 컴파일할 때마다 변경된 텍스트 파일이 자동 스냅샷된다.
-- `GET {base}/history` — 리비전 목록 (작성자·시각·±줄 수, 최신순)
-- `GET {base}/history/{{rev_id}}` — 직전 대비 줄 단위 diff
-- `POST {base}/history/{{rev_id}}/restore` — 해당 버전으로 복원 (잠금 필요)
+- Every compile auto-snapshots the changed text files.
+- `GET {base}/history` — revision list (author, time, ± line counts, newest first)
+- `GET {base}/history/{{rev_id}}` — line-level diff vs. the previous revision
+- `POST {base}/history/{{rev_id}}/restore` — restore to that version (lock required)
 
-## 리뷰 코멘트 (잠금 불필요)
+## Review Comments (no lock needed)
 
-- `GET {base}/comments?file_id={{id}}` — 코멘트 목록 (status: open|resolved)
-- `POST {base}/comments` body `{{"file_id": N, "quote": "<원문 조각>", "anchor": <오프셋>, "body": "..."}}` — 선택 구간에 코멘트
-- `PUT {base}/comments/{{id}}` body `{{"status": "resolved"}}` — 해결 처리
-- 리뷰 의견은 본문을 고치는 대신 코멘트로 남길 수 있다 — 잠금이 없어도 된다.
+- `GET {base}/comments?file_id={{id}}` — comment list (status: open|resolved)
+- `POST {base}/comments` body `{{"file_id": N, "quote": "<source fragment>", "anchor": <offset>, "body": "..."}}` — comment on a selected span
+- `PUT {base}/comments/{{id}}` body `{{"status": "resolved"}}` — mark as resolved
+- You can leave review feedback as comments instead of editing the content — no lock is needed.
 
-## 규칙
+## Rules
 
-- 진입점은 항상 `main.tex` 다. 동봉된 .sty/.cls 파일은 삭제하지 말 것.
-- 이미지 업로드는 multipart `POST {base}/files/upload` (file, folder) — jpg/png/gif/webp/pdf/eps, 20MB 이하.
-- 컴파일이 422 면 로그의 `!` 줄을 읽고 LaTeX 오류를 고친 뒤 다시 컴파일한다.
-- 작업을 마치면 compile 로 PDF 생성 여부를 검증하고 unlock 한다.
+- The entry point is always `main.tex`. Do not delete the bundled .sty/.cls files.
+- Image uploads use multipart `POST {base}/files/upload` (file, folder) — jpg/png/gif/webp/pdf/eps, up to 20MB.
+- If compile returns 422, read the `!` lines in the log, fix the LaTeX errors, and compile again.
+- When done, verify the PDF is generated via compile and then unlock.
 """
     return Response(content=md, media_type="text/markdown; charset=utf-8")
 
 
-# ── LaTeX 컴파일 (PDF 미리보기) ──
+# ── LaTeX compile (PDF preview) ──
 
 import shutil
 import subprocess
@@ -991,7 +991,7 @@ import tempfile
 from fastapi.responses import Response
 
 def _find_tex_engine() -> str | None:
-    # 한글 제목·본문이 일반적이므로 유니코드 네이티브 xelatex 우선
+    # Korean titles/content are common, so prefer Unicode-native xelatex
     for name in ("xelatex", "pdflatex"):
         found = shutil.which(name) or (
             f"/Library/TeX/texbin/{name}"
@@ -1020,14 +1020,14 @@ def compile_paper(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ) -> Response:
-    """파일 트리를 임시 디렉터리에 풀고 컴파일 — PDF 또는 422+로그.
+    """Unpack the file tree into a temp directory and compile — PDF or 422+log.
 
-    entry 가 주어지면 그 파일 기준으로 미리보기:
-    - \\documentclass 가 있으면 그 파일을 진입점으로 직접 컴파일
-    - 없으면(섹션 조각) main.tex 의 프리앰블을 빌려 \\input 래퍼로 컴파일
+    If entry is given, preview based on that file:
+    - if it has \\documentclass, compile that file directly as the entry point
+    - otherwise (a section fragment), borrow main.tex's preamble and compile with an \\input wrapper
     """
     if _TEX_ENGINE is None:
-        raise HTTPException(status_code=503, detail="서버에 LaTeX(pdflatex)가 설치되어 있지 않습니다")
+        raise HTTPException(status_code=503, detail="LaTeX (pdflatex) is not installed on the server")
     paper = _get_paper_or_404(db, paper_ref, user)
     files = list(
         db.scalars(select(models.PaperFile).where(models.PaperFile.paper_id == paper.id))
@@ -1039,25 +1039,25 @@ def compile_paper(
     if entry and entry != "main.tex":
         ef = by_path.get(entry)
         if ef is None:
-            raise HTTPException(status_code=404, detail=f"{entry} 파일을 찾을 수 없습니다")
+            raise HTTPException(status_code=404, detail=f"File {entry} not found")
         if "\\documentclass" in ef.content:
             target = entry
         else:
             main = by_path.get("main.tex")
             if main is None:
-                raise HTTPException(status_code=422, detail="main.tex 가 필요합니다")
+                raise HTTPException(status_code=422, detail="main.tex is required")
             head, sep, _ = main.content.partition("\\begin{document}")
             if not sep:
                 raise HTTPException(
-                    status_code=422, detail="main.tex 에 \\begin{document} 가 없습니다"
+                    status_code=422, detail="main.tex has no \\begin{document}"
                 )
             stem = entry[:-4] if entry.endswith(".tex") else entry
             wrapper = head + "\\begin{document}\n\\input{" + stem + "}\n\\end{document}\n"
             target = "__preview__.tex"
     elif "main.tex" not in by_path:
-        raise HTTPException(status_code=422, detail="main.tex 가 필요합니다")
+        raise HTTPException(status_code=422, detail="main.tex is required")
 
-    # 컴파일 = 체크포인트: 변경된 텍스트 파일을 버전 히스토리에 스냅샷
+    # compile = checkpoint: snapshot changed text files into version history
     _record_revisions(db, paper, user)
 
     upload_root = os.path.dirname(os.path.dirname(PAPER_UPLOAD_DIR))
@@ -1076,11 +1076,11 @@ def compile_paper(
                 if os.path.exists(src):
                     shutil.copyfile(src, disk)
 
-        if wrapper is not None:  # 섹션 조각 미리보기 — main 프리앰블 + \input 래퍼
+        if wrapper is not None:  # section fragment preview — main preamble + \input wrapper
             with open(os.path.join(tmp, target), "w", encoding="utf-8") as out:
                 out.write(wrapper)
 
-        # 참조(\ref·목차) 해결을 위해 여러 번 실행. shell-escape 차단.
+        # Run multiple times to resolve references (\ref, table of contents). Block shell-escape.
         cmd = [
             _TEX_ENGINE,
             "-interaction=nonstopmode",
@@ -1096,39 +1096,39 @@ def compile_paper(
                     cmd, cwd=tmp, capture_output=True, text=True, timeout=60
                 )
             except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=422, detail="컴파일이 60초를 초과했습니다")
+                raise HTTPException(status_code=422, detail="Compilation exceeded 60 seconds")
             out = proc.stdout[-4000:]
             if proc.returncode != 0:
-                idx = out.find("\n!")  # '!' 가 LaTeX 오류 마커
+                idx = out.find("\n!")  # '!' is the LaTeX error marker
                 detail = out[idx:][:2000] if idx >= 0 else out[-2000:]
                 raise HTTPException(status_code=422, detail=detail.strip())
             return out
 
-        # 1) 첫 패스로 .aux 생성
+        # 1) first pass generates .aux
         log = _run_tex()
 
-        # 2) .bib 기반 참고문헌(\bibliography{})이면 bibtex 실행 → .bbl 생성
-        #    thebibliography 직접 사용 시엔 \bibdata 가 없어 스킵된다 (회귀 방지)
+        # 2) for .bib-based bibliography (\bibliography{}), run bibtex → generate .bbl
+        #    when using thebibliography directly there is no \bibdata, so it is skipped (regression guard)
         aux_path = os.path.join(tmp, stem + ".aux")
         if _BIBTEX_ENGINE and os.path.exists(aux_path):
             with open(aux_path, encoding="utf-8", errors="ignore") as fh:
                 aux = fh.read()
             if "\\bibdata" in aux:
                 try:
-                    # 실패해도(.bib 문법오류 등) 컴파일은 계속 — references 만 비게 둔다
+                    # even on failure (e.g. .bib syntax error) compilation continues — only references stay empty
                     subprocess.run(
                         [_BIBTEX_ENGINE, stem], cwd=tmp, capture_output=True, text=True, timeout=30
                     )
                 except subprocess.TimeoutExpired:
                     pass
 
-        # 3) 참조·인용 번호 안정화를 위해 2회 더
+        # 3) two more passes to stabilize reference/citation numbering
         for _ in range(2):
             log = _run_tex()
 
         pdf_name = os.path.splitext(os.path.basename(target))[0] + ".pdf"
         pdf_path = os.path.join(tmp, pdf_name)
         if not os.path.exists(pdf_path):
-            raise HTTPException(status_code=422, detail=log[-2000:].strip() or "PDF 생성 실패")
+            raise HTTPException(status_code=422, detail=log[-2000:].strip() or "PDF generation failed")
         with open(pdf_path, "rb") as fh:
             return Response(content=fh.read(), media_type="application/pdf")

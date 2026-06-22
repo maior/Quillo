@@ -1,8 +1,8 @@
-"""Quillo standalone FastAPI 앱 (:8675).
+"""Quillo standalone FastAPI app (:8675).
 
-논문 워크스페이스 단독 구동용. 호스트에 임베드할 때는 main 대신
-`from quillo import paper_router, templates_router, get_current_user` 를 쓰고
-app.dependency_overrides 로 인증/DB 를 교체한다 (README 참고).
+For running the paper workspace on its own. When embedding into a host, instead of
+main, use `from quillo import paper_router, templates_router, get_current_user` and
+swap out authentication/DB via app.dependency_overrides (see README).
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ UPLOAD_DIR = os.path.dirname(PAPER_UPLOAD_DIR)  # backend/uploads
 
 
 def _migrate(bind) -> None:
-    """가벼운 스키마 마이그레이션 — create_all 은 기존 테이블에 컬럼을 추가하지 않는다."""
+    """Lightweight schema migration — create_all does not add columns to existing tables."""
     with bind.begin() as conn:
         cols = [row[1] for row in conn.execute(text("PRAGMA table_info(paper)"))]
         if cols and "key" not in cols:
@@ -46,7 +46,7 @@ def _backfill_paper_keys(db: Session) -> None:
 
 
 def _seed_admin(db: Session) -> None:
-    """env(QUILLO_ADMIN_EMAIL/PASSWORD)로 초기 관리자 1명을 보장한다."""
+    """Ensure one initial admin from env (QUILLO_ADMIN_EMAIL/PASSWORD)."""
     email = os.environ.get("QUILLO_ADMIN_EMAIL", "admin@quillo.local")
     password = os.environ.get("QUILLO_ADMIN_PASSWORD", "change-me-quillo")
     if db.scalar(select(models.User).where(models.User.email == email)):

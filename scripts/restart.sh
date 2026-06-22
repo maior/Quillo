@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 재시작: 정지 후 기동. (git pull 후 코드 반영용)
+# Restart: stop then start. (For applying code changes after git pull)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$ROOT/scripts/stop.sh"

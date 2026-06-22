@@ -5,7 +5,7 @@
     "publisher": "IEEE",
     "kind": "journal",
     "columns": 2,
-    "description": "IEEE 저널·트랜잭션 (IEEE TCPMT, TED 등). 2단 조판, IEEEtran 클래스 동봉.",
+    "description": "IEEE journals and transactions (e.g., IEEE TCPMT, TED). Two-column layout, bundled IEEEtran class.",
     "main": "ieee-journal.tex",
     "extra_files": [{"path": "IEEEtran.cls", "src": "IEEEtran.cls"}]
   },
@@ -15,7 +15,7 @@
     "publisher": "IEEE",
     "kind": "conference",
     "columns": 2,
-    "description": "IEEE 학회 발표 논문 (ECTC, EPTC 등). 2단 학회 포맷, IEEEtran 클래스 동봉.",
+    "description": "IEEE conference papers (e.g., ECTC, EPTC). Two-column conference format, bundled IEEEtran class.",
     "main": "ieee-conference.tex",
     "extra_files": [{"path": "IEEEtran.cls", "src": "IEEEtran.cls"}]
   },
@@ -25,17 +25,17 @@
     "publisher": "IEEE",
     "kind": "journal",
     "columns": 2,
-    "description": "IEEE 레터 (Electron Device Letters 등 단신 논문, 약 3쪽). 2단, IEEEtran 동봉.",
+    "description": "IEEE letters (short papers such as Electron Device Letters, about 3 pages). Two-column, bundled IEEEtran.",
     "main": "ieee-letter.tex",
     "extra_files": [{"path": "IEEEtran.cls", "src": "IEEEtran.cls"}]
   },
   {
     "key": "ieee-peerreview",
-    "name": "IEEE Peer Review (투고용)",
+    "name": "IEEE Peer Review (submission)",
     "publisher": "IEEE",
     "kind": "journal",
     "columns": 1,
-    "description": "IEEE 심사 제출용 1단 더블스페이스 레이아웃. 심사 후 journal 옵션으로 전환.",
+    "description": "IEEE single-column double-spaced layout for peer-review submission. Switch to the journal option after review.",
     "main": "ieee-peerreview.tex",
     "extra_files": [{"path": "IEEEtran.cls", "src": "IEEEtran.cls"}]
   },
@@ -45,7 +45,7 @@
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "Microelectronics Reliability 투고용 (elsarticle, review 모드 1단).",
+    "description": "For submission to Microelectronics Reliability (elsarticle, single-column review mode).",
     "main": "elsevier-micrel.tex",
     "extra_files": []
   },
@@ -55,7 +55,7 @@
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "Journal of Manufacturing Processes 투고용 (elsarticle, review 모드 1단).",
+    "description": "For submission to the Journal of Manufacturing Processes (elsarticle, single-column review mode).",
     "main": "elsevier-jmapro.tex",
     "extra_files": []
   },
@@ -65,7 +65,7 @@
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "Materials Characterization 투고용 (elsarticle, review 모드 1단).",
+    "description": "For submission to Materials Characterization (elsarticle, single-column review mode).",
     "main": "elsevier-matchar.tex",
     "extra_files": []
   },
@@ -75,7 +75,7 @@
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "Journal of Alloys and Compounds 투고용 (elsarticle, review 모드 1단).",
+    "description": "For submission to the Journal of Alloys and Compounds (elsarticle, single-column review mode).",
     "main": "elsevier-jallcom.tex",
     "extra_files": []
   },
@@ -85,27 +85,27 @@
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "Applied Surface Science 투고용 (elsarticle, review 모드 1단).",
+    "description": "For submission to Applied Surface Science (elsarticle, single-column review mode).",
     "main": "elsevier-apsusc.tex",
     "extra_files": []
   },
   {
     "key": "elsevier-final-1col",
-    "name": "Elsevier Final (1단 조판)",
+    "name": "Elsevier Final (single column)",
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 1,
-    "description": "게재 확정 후 최종 조판 미리보기 — elsarticle final 3p, 1단.",
+    "description": "Final typeset preview after acceptance — elsarticle final 3p, single-column.",
     "main": "elsevier-final-1col.tex",
     "extra_files": []
   },
   {
     "key": "elsevier-final-2col",
-    "name": "Elsevier Final (2단 조판)",
+    "name": "Elsevier Final (two column)",
     "publisher": "Elsevier",
     "kind": "journal",
     "columns": 2,
-    "description": "게재 확정 후 최종 조판 미리보기 — elsarticle final 5p, 2단.",
+    "description": "Final typeset preview after acceptance — elsarticle final 5p, two-column.",
     "main": "elsevier-final-2col.tex",
     "extra_files": []
   },
@@ -115,7 +115,7 @@
     "publisher": "American Physical Society",
     "kind": "journal",
     "columns": 2,
-    "description": "Physical Review B — REVTeX 4.2 reprint 2단 조판.",
+    "description": "Physical Review B — REVTeX 4.2 reprint two-column layout.",
     "main": "revtex-prb.tex",
     "extra_files": []
   },
@@ -125,7 +125,7 @@
     "publisher": "American Physical Society",
     "kind": "journal",
     "columns": 2,
-    "description": "Physical Review Applied — REVTeX 4.2 reprint 2단 조판.",
+    "description": "Physical Review Applied — REVTeX 4.2 reprint two-column layout.",
     "main": "revtex-prapplied.tex",
     "extra_files": []
   },
@@ -135,7 +135,7 @@
     "publisher": "AIP Publishing",
     "kind": "journal",
     "columns": 2,
-    "description": "AIP Journal of Applied Physics — REVTeX 4.2 (aip,jap) reprint 2단.",
+    "description": "AIP Journal of Applied Physics — REVTeX 4.2 (aip,jap) reprint two-column.",
     "main": "revtex-jap.tex",
     "extra_files": []
   },
@@ -145,17 +145,17 @@
     "publisher": "AIP Publishing",
     "kind": "journal",
     "columns": 2,
-    "description": "Applied Physics Letters — REVTeX 4.2 (aip,apl) reprint 2단.",
+    "description": "Applied Physics Letters — REVTeX 4.2 (aip,apl) reprint two-column.",
     "main": "revtex-apl.tex",
     "extra_files": []
   },
   {
     "key": "revtex-preprint",
-    "name": "APS Preprint (투고용)",
+    "name": "APS Preprint (submission)",
     "publisher": "American Physical Society",
     "kind": "journal",
     "columns": 1,
-    "description": "APS 계열 심사 제출용 1단 preprint 레이아웃 (REVTeX 4.2).",
+    "description": "Single-column preprint layout for APS-family peer-review submission (REVTeX 4.2).",
     "main": "revtex-preprint.tex",
     "extra_files": []
   },
@@ -165,7 +165,7 @@
     "publisher": "NeurIPS",
     "kind": "conference",
     "columns": 1,
-    "description": "Neural Information Processing Systems — 공식 스타일 동봉, preprint 모드 1단.",
+    "description": "Neural Information Processing Systems — bundled official style, single-column preprint mode.",
     "main": "neurips.tex",
     "extra_files": [{"path": "neurips_2023.sty", "src": "neurips_2023.sty"}]
   },
@@ -175,7 +175,7 @@
     "publisher": "ICML",
     "kind": "conference",
     "columns": 2,
-    "description": "International Conference on Machine Learning — 공식 스타일 동봉, 2단.",
+    "description": "International Conference on Machine Learning — bundled official style, two-column.",
     "main": "icml.tex",
     "extra_files": [
       {"path": "icml2024.sty", "src": "icml2024.sty"},
@@ -188,7 +188,7 @@
     "publisher": "IEEE / CVF",
     "kind": "conference",
     "columns": 2,
-    "description": "Computer Vision and Pattern Recognition — 공식 author-kit 스타일 동봉, 2단.",
+    "description": "Computer Vision and Pattern Recognition — bundled official author-kit style, two-column.",
     "main": "cvpr.tex",
     "extra_files": [
       {"path": "cvpr.sty", "src": "cvpr.sty"},
@@ -201,7 +201,7 @@
     "publisher": "ACL",
     "kind": "conference",
     "columns": 2,
-    "description": "*ACL 계열 NLP 학회 — 공식 스타일 동봉, 2단.",
+    "description": "*ACL-family NLP conferences — bundled official style, two-column.",
     "main": "acl.tex",
     "extra_files": [{"path": "acl.sty", "src": "acl.sty"}]
   },
@@ -211,57 +211,57 @@
     "publisher": "Springer",
     "kind": "conference",
     "columns": 1,
-    "description": "Springer Lecture Notes in Computer Science 프로시딩. 1단, llncs 클래스 동봉.",
+    "description": "Springer Lecture Notes in Computer Science proceedings. Single-column, bundled llncs class.",
     "main": "springer-lncs.tex",
     "extra_files": [{"path": "llncs.cls", "src": "llncs.cls"}]
   },
   {
     "key": "beamer-presentation",
-    "name": "Beamer 발표 슬라이드",
+    "name": "Beamer Presentation",
     "publisher": "Standard LaTeX",
     "kind": "presentation",
     "columns": 1,
-    "description": "학회·세미나 발표용 슬라이드 (beamer, Madrid 테마).",
+    "description": "Slides for conference and seminar presentations (beamer, Madrid theme).",
     "main": "beamer-presentation.tex",
     "extra_files": []
   },
   {
     "key": "article-basic",
-    "name": "기본 Article (1단)",
+    "name": "Basic Article (single column)",
     "publisher": "Standard LaTeX",
     "kind": "generic",
     "columns": 1,
-    "description": "표준 article 클래스 — 초안·내부 보고서·범용.",
+    "description": "Standard article class — drafts, internal reports, general purpose.",
     "main": "article-basic.tex",
     "extra_files": []
   },
   {
     "key": "article-twocolumn",
-    "name": "기본 Article (2단)",
+    "name": "Basic Article (two column)",
     "publisher": "Standard LaTeX",
     "kind": "generic",
     "columns": 2,
-    "description": "표준 article 2단 조판 — 저널풍 초안·프리프린트.",
+    "description": "Standard article two-column layout — journal-style drafts and preprints.",
     "main": "article-twocolumn.tex",
     "extra_files": []
   },
   {
     "key": "report-thesis",
-    "name": "Report / 학위논문 초안",
+    "name": "Report / Thesis Draft",
     "publisher": "Standard LaTeX",
     "kind": "generic",
     "columns": 1,
-    "description": "report 클래스 — 장(chapter) 구조의 학위논문·기술보고서 초안.",
+    "description": "report class — chapter-structured thesis and technical report drafts.",
     "main": "report-thesis.tex",
     "extra_files": []
   },
   {
     "key": "article-korean",
-    "name": "한국어 보고서 (kotex)",
+    "name": "Korean Report (kotex)",
     "publisher": "Standard LaTeX",
     "kind": "generic",
     "columns": 1,
-    "description": "kotex 기반 한국어 문서 — 국문 보고서·제안서.",
+    "description": "Korean-language document using kotex (Hangul support) — Korean reports and proposals.",
     "main": "article-korean.tex",
     "extra_files": []
   }

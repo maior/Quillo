@@ -1,7 +1,8 @@
-"""SQLAlchemy ORM 모델 — 논문 워크스페이스(Quillo) 전용.
+"""SQLAlchemy ORM models — dedicated to the paper workspace (Quillo).
 
-mspl 에서 추출. User/AuthSession/ApiToken 은 standalone 인증을 위한 최소 모델이며,
-호스트 앱에 임베드할 때는 get_current_user/get_db 를 override 해 호스트 사용자 체계를 쓴다.
+Extracted from mspl. User/AuthSession/ApiToken are minimal models for standalone
+authentication; when embedding into a host app, override get_current_user/get_db to
+use the host's user system.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
 
 
-# ── 인증 (standalone 최소 구성) ─────────────────────────────────────────────
+# ── Authentication (minimal standalone setup) ───────────────────────────────
 class User(Base):
     __tablename__ = "user"
 
@@ -33,40 +34,40 @@ class AuthSession(Base):
 
 
 class ApiToken(Base):
-    """외부 도구(Claude Code 등)용 개인 API 토큰 — 사용자당 1개, 해시만 저장."""
+    """Personal API token for external tools (Claude Code, etc.) — one per user, hash only."""
 
     __tablename__ = "api_token"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     token_hash: Mapped[str] = mapped_column(String(64), index=True)  # sha256 hex
-    prefix: Mapped[str] = mapped_column(String(16))  # 식별용 앞 10자
+    prefix: Mapped[str] = mapped_column(String(16))  # first 10 chars for identification
     created_at: Mapped[str] = mapped_column(String(32))  # ISO8601 UTC
 
 
-# ── 논문 워크스페이스 ───────────────────────────────────────────────────────
+# ── Paper workspace ─────────────────────────────────────────────────────────
 class Paper(Base):
     __tablename__ = "paper"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # 외부 노출용 불투명 해시 키 — URL/API 는 순번 id 대신 이 키를 쓴다
+    # Opaque hash key for external exposure — URLs/API use this key instead of the sequential id
     key: Mapped[str] = mapped_column(String(16), default="", index=True)
-    # 소유자 — 원고는 소유자·초대된 협업자·admin 만 접근한다 (0 = 미지정 구버전)
+    # Owner — manuscripts are accessible only to the owner, invited collaborators, and admins (0 = legacy, unassigned)
     owner_id: Mapped[int] = mapped_column(Integer, default=0, index=True)
     title: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="draft")  # draft|submitted|revision|published
     journal: Mapped[str] = mapped_column(String(255), default="")
-    content: Mapped[str] = mapped_column(Text, default="")  # LaTeX/Markdown 원고
+    content: Mapped[str] = mapped_column(Text, default="")  # LaTeX/Markdown manuscript
     created_by: Mapped[str] = mapped_column(String(128), default="")
     updated_by: Mapped[str] = mapped_column(String(128), default="")
     updated_at: Mapped[str] = mapped_column(String(32), default="")
-    lock_user_id: Mapped[int] = mapped_column(Integer, default=0)  # 0 = 잠금 없음
+    lock_user_id: Mapped[int] = mapped_column(Integer, default=0)  # 0 = no lock
     lock_user_name: Mapped[str] = mapped_column(String(128), default="")
     locked_at: Mapped[str] = mapped_column(String(32), default="")
 
 
 class PaperCollaborator(Base):
-    """원고 공동 집필 초대 — 소유자가 초대한 멤버만 해당 원고를 보고 편집한다."""
+    """Manuscript co-authoring invitation — only members invited by the owner can view and edit the manuscript."""
 
     __tablename__ = "paper_collaborator"
 
@@ -77,7 +78,7 @@ class PaperCollaborator(Base):
 
 
 class PaperComment(Base):
-    """리뷰 코멘트 — 파일의 선택 구간(quote)에 단다. 잠금과 무관."""
+    """Review comment — attached to a selected range (quote) of a file. Independent of locking."""
 
     __tablename__ = "paper_comment"
 
@@ -86,15 +87,15 @@ class PaperComment(Base):
     file_id: Mapped[int] = mapped_column(Integer, index=True)
     author_id: Mapped[int] = mapped_column(Integer, default=0)
     author_name: Mapped[str] = mapped_column(String(128), default="")
-    quote: Mapped[str] = mapped_column(Text, default="")  # 선택된 원문 조각 (앵커)
-    anchor: Mapped[int] = mapped_column(Integer, default=0)  # 작성 시점 오프셋 힌트
+    quote: Mapped[str] = mapped_column(Text, default="")  # selected source fragment (anchor)
+    anchor: Mapped[int] = mapped_column(Integer, default=0)  # offset hint at time of writing
     body: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16), default="open")  # open | resolved
     created_at: Mapped[str] = mapped_column(String(32), default="")  # ISO8601 UTC
 
 
 class PaperRevision(Base):
-    """버전 히스토리 — 컴파일 시점에 변경된 텍스트 파일의 스냅샷."""
+    """Version history — snapshot of text files changed at compile time."""
 
     __tablename__ = "paper_revision"
 
@@ -113,7 +114,7 @@ class PaperFile(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     paper_id: Mapped[int] = mapped_column(Integer, index=True)
-    path: Mapped[str] = mapped_column(String(512))  # 논리 경로 (예: sections/intro.tex)
+    path: Mapped[str] = mapped_column(String(512))  # logical path (e.g. sections/intro.tex)
     kind: Mapped[str] = mapped_column(String(16), default="text")  # text | image | folder
-    content: Mapped[str] = mapped_column(Text, default="")  # text 파일 본문
-    storage: Mapped[str] = mapped_column(String(512), default="")  # 이미지 실제 경로(/uploads/...)
+    content: Mapped[str] = mapped_column(Text, default="")  # body of a text file
+    storage: Mapped[str] = mapped_column(String(512), default="")  # actual image path (/uploads/...)

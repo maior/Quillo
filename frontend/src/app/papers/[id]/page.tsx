@@ -39,8 +39,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8675";
 
 interface Paper {
   id: number;
-  key: string; // 외부 노출용 해시 키
-  mine: boolean; // 내가 소유자
+  key: string; // hash key for external exposure
+  mine: boolean; // I am the owner
   title: string;
   status: string;
   journal: string;
@@ -64,30 +64,30 @@ interface Template {
   name: string;
   publisher: string;
   kind: string;
-  columns: number; // 1=1단, 2=2단
+  columns: number; // 1=single column, 2=two column
   description: string;
 }
 
-// 레이아웃 뱃지 — 목록에서 단 구성을 한눈에 구분
+// Layout badge — distinguishes the column layout at a glance in the list
 function layoutBadge(t: Template) {
   if (t.kind === "presentation")
-    return { label: `슬라이드`, cls: "bg-amber-50 text-amber-600" };
-  if (t.columns === 2) return { label: `2단`, cls: "bg-accent/10 text-accent" };
-  return { label: `1단`, cls: "bg-ink/5 text-ink/50" };
+    return { label: `Slides`, cls: "bg-amber-50 text-amber-600" };
+  if (t.columns === 2) return { label: `2-col`, cls: "bg-accent/10 text-accent" };
+  return { label: `1-col`, cls: "bg-ink/5 text-ink/50" };
 }
 
 const STATUSES = [
-  { value: "draft", label: "초안" },
-  { value: "submitted", label: "투고" },
-  { value: "revision", label: "리비전" },
-  { value: "published", label: "게재" },
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "revision", label: "Revision" },
+  { value: "published", label: "Published" },
 ];
 
-// ── 트리 구성 ──
+// ── Tree construction ──
 type TreeNode = {
   name: string;
   path: string;
-  file?: PFile; // folder 행 또는 파일
+  file?: PFile; // folder row or file
   children: TreeNode[];
 };
 
@@ -153,7 +153,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   const [me, setMe] = useState<{ id: number; name: string; email: string; role: string } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // ── 리뷰 코멘트 ──
+  // ── Review comments ──
   interface PComment {
     id: number;
     file_id: number;
@@ -176,7 +176,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
     setComments(await authFetch<PComment[]>(`/api/papers/${id}/comments`));
   }, [id]);
 
-  // 코멘트 구간의 현재 위치 — quote 를 anchor 근처에서 탐색 (본문이 바뀌면 못 찾을 수 있음)
+  // Current position of a comment range — search for the quote near the anchor (may not be found if the body changed)
   const locateQuote = useCallback(
     (c: PComment): number => {
       if (!c.quote) return -1;
@@ -212,7 +212,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       setSelRange(null);
       await loadComments();
     } catch (e) {
-      flash(e instanceof Error ? e.message : "코멘트 등록에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to post the comment.");
     }
   };
 
@@ -225,7 +225,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   };
 
   const deleteComment = async (c: PComment) => {
-    if (!confirm("이 코멘트를 삭제할까요?")) return;
+    if (!confirm("Delete this comment?")) return;
     await authFetch(`/api/papers/${id}/comments/${c.id}`, { method: "DELETE" });
     await loadComments();
   };
@@ -240,7 +240,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
     ta.scrollTop = Math.max(0, (line - 4) * 21.1); // leading-relaxed(13px×1.625)
   };
 
-  // 읽기 전용 보기에서도 선택 → 코멘트 (리뷰어는 잠금 없이 코멘트만 남긴다)
+  // Select → comment even in read-only view (reviewers leave comments only, without a lock)
   const readSelection = () => {
     const sel = window.getSelection();
     const pre = preRef.current;
@@ -255,12 +255,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
     setSelRange({ start, end: start + range.toString().length });
   };
   const [compiling, setCompiling] = useState(false);
-  const [previewPct, setPreviewPct] = useState(46); // 분할바로 조절되는 미리보기 폭(%)
+  const [previewPct, setPreviewPct] = useState(46); // preview width (%) adjusted by the split bar
   const splitRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── 템플릿 모달 ──
+  // ── Template modal ──
   const [tplOpen, setTplOpen] = useState(false);
   const [tplList, setTplList] = useState<Template[]>([]);
   const [tplSelected, setTplSelected] = useState<string | null>(null);
@@ -291,7 +291,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
   const applyTemplate = async () => {
     if (!tplSelected) return;
-    if (!confirm("main.tex 가 이 템플릿 골격으로 교체됩니다. 진행할까요?")) return;
+    if (!confirm("main.tex will be replaced with this template skeleton. Proceed?")) return;
     setTplBusy(true);
     try {
       await authFetch(`/api/papers/${id}/apply-template`, {
@@ -303,15 +303,15 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       const main = fs.find((f) => f.path === "main.tex");
       if (main) await openFile(main);
       void compile();
-      flash("템플릿이 적용되었습니다.");
+      flash("Template applied.");
     } catch (e) {
-      flash(e instanceof Error ? e.message : "템플릿 적용에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to apply the template.");
     } finally {
       setTplBusy(false);
     }
   };
 
-  // ── 공유·편집 초대 모달 ──
+  // ── Share / edit invitation modal ──
   interface Collaborator {
     user_id: number;
     name: string;
@@ -355,21 +355,21 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       setInviteEmail("");
       const info = await loadShare();
       setDirectory((d) => d.filter((u) => !info!.collaborators.some((c) => c.user_id === u.id)));
-      flash("초대했습니다.");
+      flash("Invitation sent.");
     } catch (e) {
-      flash(e instanceof Error ? e.message : "초대에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to send the invitation.");
     } finally {
       setShareBusy(false);
     }
   };
 
   const removeCollaborator = async (c: Collaborator) => {
-    if (!confirm(`${c.name} 님의 편집 권한을 해제할까요?`)) return;
+    if (!confirm(`Revoke edit access for ${c.name}?`)) return;
     await authFetch(`/api/papers/${id}/collaborators/${c.user_id}`, { method: "DELETE" });
     await loadShare();
   };
 
-  // ── 버전 히스토리 ──
+  // ── Version history ──
   interface RevMeta {
     id: number;
     file_id: number;
@@ -399,7 +399,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   const openHistory = () => {
     setCommentsOpen(false);
     setHistoryOpen(true);
-    setPreviewPct((p) => Math.min(p, 34)); // 패널이 열리면 미리보기가 폭을 양보 — 에디터 압사 방지
+    setPreviewPct((p) => Math.min(p, 34)); // when the panel opens, the preview yields width — prevents crushing the editor
     void loadHistory();
   };
 
@@ -408,7 +408,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   };
 
   const restoreRevision = async (rev: RevDetail) => {
-    if (!confirm(`${rev.path} 를 ${revTime(rev.created_at)} 버전으로 되돌릴까요?`)) return;
+    if (!confirm(`Revert ${rev.path} to the ${revTime(rev.created_at)} version?`)) return;
     try {
       const r = await authFetch<{ file_id: number }>(
         `/api/papers/${id}/history/${rev.id}/restore`,
@@ -418,14 +418,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       const fs = await loadAll();
       const f = fs.find((x) => x.id === r.file_id);
       if (f) await openFile(f);
-      flash("해당 버전으로 되돌렸습니다.");
+      flash("Reverted to that version.");
       void compile();
     } catch (e) {
-      flash(e instanceof Error ? e.message : "되돌리기에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to revert.");
     }
   };
 
-  // ── 외부 API 액세스 모달 (Claude Code 등 외부 도구 연동) ──
+  // ── External API access modal (integration with external tools like Claude Code) ──
   const [apiOpen, setApiOpen] = useState(false);
   const [tokenStatus, setTokenStatus] = useState<{ has_token: boolean; prefix?: string } | null>(null);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
@@ -439,18 +439,18 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   };
 
   const issueToken = async () => {
-    if (tokenStatus?.has_token && !confirm("기존 토큰은 즉시 무효화됩니다. 재발급할까요?")) return;
+    if (tokenStatus?.has_token && !confirm("The existing token will be invalidated immediately. Reissue?")) return;
     setApiBusy(true);
     try {
       const r = await authFetch<{ token: string }>("/api/auth/token", { method: "POST" });
       setIssuedToken(r.token);
       setTokenStatus(await authFetch<{ has_token: boolean; prefix?: string }>("/api/auth/token"));
-      // 놓치고 닫는 일이 없도록 발급 즉시 클립보드에 복사
+      // Copy to clipboard immediately on issue so it isn't lost when closing
       try {
         await navigator.clipboard.writeText(r.token);
-        flash("토큰이 클립보드에 복사되었습니다.");
+        flash("Token copied to the clipboard.");
       } catch {
-        /* 클립보드 권한 없으면 복사 버튼으로 */
+        /* if clipboard permission is denied, use the copy button */
       }
     } finally {
       setApiBusy(false);
@@ -458,13 +458,13 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   };
 
   const revokeToken = async () => {
-    if (!confirm("토큰을 폐기하면 외부 도구의 접근이 즉시 차단됩니다. 폐기할까요?")) return;
+    if (!confirm("Revoking the token immediately blocks external tools from access. Revoke?")) return;
     await authFetch("/api/auth/token", { method: "DELETE" });
     setIssuedToken(null);
     setTokenStatus({ has_token: false });
   };
 
-  // 도구 모음 삽입 — 선택 영역이 있으면 감싸고, 없으면 placeholder 위치에 커서
+  // Toolbar insertion — wrap the selection if there is one, otherwise place the cursor at the placeholder
   const insertSnippet = (before: string, after = "", placeholder = "") => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -481,7 +481,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
         const pos = s + before.length + mid.length + after.length;
         ta.setSelectionRange(pos, pos);
       } else {
-        // placeholder(또는 빈 칸)를 선택 상태로 — 바로 타이핑하면 덮어쓰기
+        // select the placeholder (or empty span) — typing right away overwrites it
         ta.setSelectionRange(s + before.length, s + before.length + mid.length);
       }
     });
@@ -512,7 +512,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
         void loadComments();
         const main = fs.find((f) => f.path === "main.tex") ?? fs.find((f) => f.kind === "text");
         if (main) await openFile(main);
-        // 미리보기는 상시 패널 — 열 때 한 번 자동 컴파일해 바로 보여준다
+        // The preview is an always-on panel — auto-compile once on open so it shows immediately
         if (!didAutoCompile.current) {
           didAutoCompile.current = true;
           void compile();
@@ -542,7 +542,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       await authFetch(`/api/papers/${id}/lock`, { method: "POST" });
       await loadAll();
     } catch (e) {
-      flash(e instanceof Error ? e.message : "잠금 획득에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to acquire the lock.");
     }
   };
 
@@ -555,16 +555,16 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           json: { content },
         });
         setDirty(false);
-        if (!quiet) flash("저장되었습니다.");
+        if (!quiet) flash("Saved.");
       } catch (e) {
-        flash(e instanceof Error ? e.message : "저장에 실패했습니다.");
+        flash(e instanceof Error ? e.message : "Failed to save.");
       }
     },
     [active, content, id],
   );
 
-  // 화면 이탈 시 잠금 자동 해제 — 떠난 사람이 30분 TTL 동안 다른 멤버를 막지 않도록.
-  // 탭 전환은 유지하고, 에디터를 실제로 떠날 때(라우팅 이동·탭 닫기)만 해제한다.
+  // Auto-release the lock on leaving the screen — so someone who left doesn't block other members for the 30-minute TTL.
+  // Keep the lock through tab switches; release only when actually leaving the editor (route change / tab close).
   const editableRef = useRef(false);
   const dirtyRef = useRef(false);
   const activeRef = useRef<PFile | null>(null);
@@ -577,10 +577,10 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     const releaseLock = () => {
       if (!editableRef.current) return;
-      editableRef.current = false; // 중복 해제 방지
+      editableRef.current = false; // prevent duplicate release
       const base = `${API_BASE}/api/papers/${id}`;
       const f = activeRef.current;
-      // 마지막 입력이 자동 저장(2.5s) 전이면 떠나기 직전에 저장
+      // if the last input was before the auto-save (2.5s), save right before leaving
       if (dirtyRef.current && f && f.kind === "text") {
         void fetch(`${base}/files/${f.id}`, {
           method: "PUT",
@@ -592,21 +592,21 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       }
       void fetch(`${base}/unlock`, { method: "POST", credentials: "include", keepalive: true });
     };
-    window.addEventListener("pagehide", releaseLock); // 탭 닫기·새로고침
+    window.addEventListener("pagehide", releaseLock); // tab close / refresh
     return () => {
       window.removeEventListener("pagehide", releaseLock);
-      releaseLock(); // SPA 내 다른 화면으로 이동 (언마운트)
+      releaseLock(); // navigation to another screen within the SPA (unmount)
     };
   }, [id]);
 
-  // 자동 저장 — 타이핑이 멈추고 2.5초 뒤 조용히 저장 (저장 버튼 없음)
+  // Auto-save — silently saves 2.5 seconds after typing stops (no save button)
   useEffect(() => {
     if (!editable || !dirty) return;
     const t = setTimeout(() => void saveFile(true), 2500);
     return () => clearTimeout(t);
   }, [content, editable, dirty, saveFile]);
 
-  // ⌘S/Ctrl+S = 컴파일 (저장은 자동이므로 단축키는 조판 갱신에)
+  // ⌘S/Ctrl+S = compile (saving is automatic, so the shortcut refreshes the typeset output)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -626,7 +626,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       await authFetch(`/api/papers/${id}`, { method: "PUT", json: meta });
       if (release) await authFetch(`/api/papers/${id}/unlock`, { method: "POST" });
       await loadAll();
-      flash(release ? "저장 후 편집을 종료했습니다." : "저장되었습니다.");
+      flash(release ? "Saved and ended editing." : "Saved.");
     } finally {
       setBusy(false);
     }
@@ -645,12 +645,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       await loadAll();
       if (f.kind === "text") await openFile(f);
     } catch (err) {
-      flash(err instanceof Error ? err.message : "생성에 실패했습니다.");
+      flash(err instanceof Error ? err.message : "Failed to create.");
     }
   };
 
-  // 트리 내부 드래그 이동 — 파일/폴더를 폴더(또는 최상위)로
-  const [dropTarget, setDropTarget] = useState<string | null>(null); // 폴더 path, "" = 최상위
+  // Drag-move within the tree — a file/folder into a folder (or the top level)
+  const [dropTarget, setDropTarget] = useState<string | null>(null); // folder path, "" = top level
 
   const moveEntry = async (fileId: number, folder: string) => {
     const f = files.find((x) => x.id === fileId);
@@ -664,14 +664,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
         json: { path: newPath },
       });
       await loadAll();
-      flash(`'${base}' 을(를) ${folder || "최상위"}로 옮겼습니다.`);
+      flash(`Moved '${base}' to ${folder || "the top level"}.`);
     } catch (e) {
-      flash(e instanceof Error ? e.message : "이동에 실패했습니다.");
+      flash(e instanceof Error ? e.message : "Failed to move.");
     }
   };
 
   const removeEntry = async (f: PFile) => {
-    if (!confirm(`'${f.path}' 을(를) 삭제할까요?${f.kind === "folder" ? " 폴더 안 파일도 함께 삭제됩니다." : ""}`)) return;
+    if (!confirm(`Delete '${f.path}'?${f.kind === "folder" ? " Files inside the folder will also be deleted." : ""}`)) return;
     await authFetch(`/api/papers/${id}/files/${f.id}`, { method: "DELETE" });
     if (activeId === f.id) setActiveId(null);
     await loadAll();
@@ -689,7 +689,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        flash(d.detail ?? `${file.name} 업로드 실패`);
+        flash(d.detail ?? `Failed to upload ${file.name}`);
       }
     }
     await loadAll();
@@ -700,12 +700,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   const compile = async () => {
     setCompiling(true);
     try {
-      // 컴파일 = 저장 + 조판: 본문과 메타(제목·상태·저널)를 먼저 반영
+      // Compile = save + typeset: apply the body and metadata (title/status/journal) first
       if (editable) {
         if (dirty) await saveFile(true);
         await authFetch(`/api/papers/${id}`, { method: "PUT", json: meta });
       }
-      // 활성 파일 기준 미리보기 — 섹션 파일이면 main 프리앰블을 빌려 그 파일만 조판
+      // Preview based on the active file — for a section file, borrow main's preamble and typeset just that file
       const entry = active?.kind === "text" ? active.path : "main.tex";
       const res = await fetch(
         `${API_BASE}/api/papers/${id}/compile?entry=${encodeURIComponent(entry)}`,
@@ -714,23 +714,23 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       setCompiledEntry(entry);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setPreview({ error: d.detail ?? "컴파일에 실패했습니다." });
+        setPreview({ error: d.detail ?? "Failed to compile." });
         return;
       }
       const bytes = await res.arrayBuffer();
       if (preview?.url) URL.revokeObjectURL(preview.url);
-      // url 은 다운로드·인쇄용, bytes 는 pdf.js 렌더용
+      // url is for download/print, bytes is for pdf.js rendering
       setPreview({
         url: URL.createObjectURL(new Blob([bytes], { type: "application/pdf" })),
         bytes,
       });
     } finally {
       setCompiling(false);
-      if (historyOpen) void loadHistory(); // 컴파일 = 체크포인트 — 열린 패널 갱신
+      if (historyOpen) void loadHistory(); // compile = checkpoint — refresh the open panel
     }
   };
 
-  // 분할바 드래그 — 미리보기 폭 25~70% 범위에서 조절
+  // Split-bar drag — adjusts the preview width within a 25–70% range
   const startSplitDrag = (e: React.PointerEvent) => {
     e.preventDefault();
     const root = splitRef.current;
@@ -765,7 +765,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
   const tree = useMemo(() => buildTree(files), [files]);
 
-  // 열린 코멘트의 현재 구간 — 마크 레이어로 형광 표시 (본문 변경으로 못 찾으면 제외)
+  // Current ranges of open comments — highlight via the mark layer (excluded if not found due to body changes)
   const commentMarks = useMemo(() => {
     if (!active) return [];
     return comments
@@ -838,7 +838,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   setDragging(false);
                   const fid = e.dataTransfer.getData("application/x-quillo-file");
                   if (fid) void moveEntry(Number(fid), node.path);
-                  // OS 파일을 폴더 위에 떨어뜨리면 그 폴더로 업로드
+                  // dropping an OS file onto a folder uploads it into that folder
                   else if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files, node.path);
                 }
               : undefined
@@ -861,7 +861,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 e.stopPropagation();
                 void removeEntry(node.file!);
               }}
-              aria-label={`${node.path} 삭제`}
+              aria-label={`Delete ${node.path}`}
               className="hidden h-5 w-5 shrink-0 place-items-center rounded text-white/30 transition hover:text-red-400 group-hover:grid"
             >
               <Trash2 size={11} />
@@ -875,14 +875,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="flex h-screen flex-col bg-gray-100/80">
-      {/* ── 상단 바 — Overleaf 풍 다크 헤더 ── */}
+      {/* ── Top bar — Overleaf-style dark header ── */}
       <div
         data-testid="editor-topbar"
         className="relative z-20 flex flex-wrap items-center gap-2.5 border-b border-white/10 bg-ink px-4 py-2.5"
       >
         <Link
           href="/papers"
-          title="내 원고 목록으로 나가기"
+          title="Back to my manuscripts"
           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/55 transition hover:bg-white/10 hover:text-white"
         >
           <ArrowLeft size={16} />
@@ -912,7 +912,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             <input
               value={meta.journal}
               onChange={(e) => setMeta({ ...meta, journal: e.target.value })}
-              placeholder="타깃 저널"
+              placeholder="Target journal"
               className="w-40 rounded-lg border border-white/15 bg-white/[0.07] px-2.5 py-1.5 text-xs text-white outline-none placeholder:text-white/30 focus:border-accent-cyan/60"
             />
           </>
@@ -923,15 +923,15 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           <button
             onClick={() => void compile()}
             disabled={compiling}
-            title="저장 + 조판 (⌘S)"
+            title="Save + typeset (⌘S)"
             className="btn rounded-full bg-accent !px-4 !py-1.5 text-xs font-semibold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] hover:bg-accent/90 disabled:opacity-60"
           >
-            {compiling ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} 컴파일
+            {compiling ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Compile
           </button>
           <span className="mx-1 hidden h-5 w-px bg-white/10 sm:block" />
           <button
             onClick={exportZip}
-            title="프로젝트 ZIP 다운로드"
+            title="Download project ZIP"
             className="btn rounded-full border border-white/15 !px-3.5 !py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
           >
             <Download size={13} /> ZIP
@@ -942,7 +942,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
               if (historyOpen) setHistoryOpen(false);
               else openHistory();
             }}
-            title="버전 히스토리 (컴파일할 때마다 기록)"
+            title="Version history (recorded on every compile)"
             data-testid="toggle-history"
             className={`btn rounded-full border !px-3.5 !py-1.5 text-xs ${
               historyOpen
@@ -950,7 +950,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 : "border-white/15 text-white/70 hover:bg-white/10 hover:text-white"
             }`}
           >
-            <History size={13} /> 히스토리
+            <History size={13} /> History
           </button>
           <button
             onClick={() => {
@@ -960,7 +960,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 return !v;
               });
             }}
-            title="리뷰 코멘트"
+            title="Review comments"
             data-testid="toggle-comments"
             className={`btn rounded-full border !px-3.5 !py-1.5 text-xs ${
               commentsOpen
@@ -968,7 +968,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 : "border-white/15 text-white/70 hover:bg-white/10 hover:text-white"
             }`}
           >
-            <MessageSquare size={13} /> 코멘트
+            <MessageSquare size={13} /> Comments
             {openCount > 0 && (
               <span className="rounded-full bg-accent-cyan/20 px-1.5 text-[10px] font-bold text-accent-cyan">
                 {openCount}
@@ -977,14 +977,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           </button>
           <button
             onClick={() => void openShare()}
-            title="멤버 초대·공유"
+            title="Invite members / share"
             className="btn rounded-full border border-white/15 !px-3.5 !py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
           >
-            <Users size={13} /> 공유
+            <Users size={13} /> Share
           </button>
           <button
             onClick={() => void openApi()}
-            title="외부 API·토큰"
+            title="External API / token"
             className="btn rounded-full border border-white/15 !px-3.5 !py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
           >
             <KeyRound size={13} /> API
@@ -993,39 +993,39 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             <>
               <button
                 onClick={() => void openTemplates()}
-                title="저널·학회 템플릿"
+                title="Journal / conference templates"
                 className="btn rounded-full border border-white/15 !px-3.5 !py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
               >
-                <LayoutTemplate size={13} /> 템플릿
+                <LayoutTemplate size={13} /> Templates
               </button>
               <button
                 onClick={() => void saveMetaAndUnlock(true)}
                 disabled={busy}
                 className="btn rounded-full border border-white/15 !px-3.5 !py-1.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
               >
-                <LockOpen size={13} /> 편집 종료
+                <LockOpen size={13} /> End editing
               </button>
             </>
           ) : paper.locked ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 px-3.5 py-1.5 text-xs font-semibold text-amber-300">
-              <Lock size={12} /> {paper.lock_user_name}님 편집 중
+              <Lock size={12} /> {paper.lock_user_name} is editing
             </span>
           ) : (
             <button
               onClick={startEdit}
               className="btn rounded-full bg-white !px-4 !py-1.5 text-xs font-semibold text-ink hover:bg-white/90"
             >
-              <Lock size={13} /> 편집 시작
+              <Lock size={13} /> Start editing
             </button>
           )}
 
-          {/* 사용자 메뉴 */}
+          {/* User menu */}
           <span className="mx-1 hidden h-5 w-px bg-white/10 sm:block" />
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
               data-testid="user-menu"
-              aria-label="사용자 메뉴"
+              aria-label="User menu"
               className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-cyan text-xs font-bold text-white ring-2 ring-white/15 transition hover:ring-white/35"
             >
               {(me?.name || me?.email || "?").slice(0, 1).toUpperCase()}
@@ -1038,7 +1038,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   className="absolute right-0 top-10 z-40 w-64 overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5"
                 >
                   <div className="border-b border-black/5 px-4 py-3">
-                    <p className="truncate text-sm font-semibold text-ink">{me?.name || "멤버"}</p>
+                    <p className="truncate text-sm font-semibold text-ink">{me?.name || "Member"}</p>
                     <p className="truncate text-xs text-ink/45">{me?.email}</p>
                   </div>
                   <div className="py-1.5">
@@ -1046,20 +1046,20 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       href="/papers"
                       className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink/70 transition hover:bg-gray-50 hover:text-ink"
                     >
-                      <FileText size={14} className="text-ink/35" /> 내 원고 목록
+                      <FileText size={14} className="text-ink/35" /> My manuscripts
                     </Link>
                     <Link
                       href="/lounge"
                       className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink/70 transition hover:bg-gray-50 hover:text-ink"
                     >
-                      <Users size={14} className="text-ink/35" /> 멤버 라운지
+                      <Users size={14} className="text-ink/35" /> Member lounge
                     </Link>
                     {me?.role === "admin" && (
                       <Link
                         href="/admin"
                         className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink/70 transition hover:bg-gray-50 hover:text-ink"
                       >
-                        <Lock size={14} className="text-ink/35" /> 관리자 콘솔
+                        <Lock size={14} className="text-ink/35" /> Admin console
                       </Link>
                     )}
                     <button
@@ -1069,13 +1069,13 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       }}
                       className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-ink/70 transition hover:bg-gray-50 hover:text-ink"
                     >
-                      <KeyRound size={14} className="text-ink/35" /> 설정 · API 토큰
+                      <KeyRound size={14} className="text-ink/35" /> Settings · API token
                     </button>
                   </div>
                   <div className="border-t border-black/5 py-1.5">
                     <button
                       onClick={async () => {
-                        // 세션이 사라지기 전에 잠금을 풀어준다 (이후 unmount 해제는 401 이라 무효)
+                        // Release the lock before the session disappears (a later unmount release would be a no-op due to 401)
                         if (editable) {
                           editableRef.current = false;
                           await authFetch(`/api/papers/${id}/unlock`, { method: "POST" }).catch(() => {});
@@ -1085,7 +1085,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       }}
                       className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-red-500 transition hover:bg-red-50"
                     >
-                      <ArrowLeft size={14} /> 로그아웃
+                      <ArrowLeft size={14} /> Log out
                     </button>
                   </div>
                 </div>
@@ -1095,7 +1095,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* ── 템플릿 선택 모달 ── */}
+      {/* ── Template selection modal ── */}
       {tplOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-lightbox-fade">
           <div className="absolute inset-0 bg-ink/45 backdrop-blur-sm" onClick={() => setTplOpen(false)} />
@@ -1103,11 +1103,11 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             data-testid="template-modal"
             className="relative flex h-[80vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl animate-lightbox-zoom"
           >
-            {/* 좌: 템플릿 리스트 */}
+            {/* Left: template list */}
             <div className="flex w-80 shrink-0 flex-col border-r border-black/5">
               <div className="border-b border-black/5 px-5 py-4">
-                <h2 className="font-display text-base font-bold text-ink">저널·학회 템플릿</h2>
-                <p className="mt-0.5 text-xs text-ink/45">{`${tplList.length}종 · 적용 즉시 컴파일이 보장됩니다`}</p>
+                <h2 className="font-display text-base font-bold text-ink">Journal / conference templates</h2>
+                <p className="mt-0.5 text-xs text-ink/45">{`${tplList.length} templates · compiles cleanly the moment you apply`}</p>
               </div>
               <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
                 {tplList.map((t) => (
@@ -1143,20 +1143,20 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   className="btn-primary flex-1 !py-2.5 text-sm disabled:opacity-50"
                 >
                   {tplBusy ? <Loader2 size={14} className="animate-spin" /> : <LayoutTemplate size={14} />}
-                  이 템플릿 적용
+                  Apply this template
                 </button>
                 <button
                   onClick={() => setTplOpen(false)}
                   className="btn rounded-full border border-black/10 px-5 text-sm text-ink/60 hover:bg-gray-50"
                 >
-                  취소
+                  Cancel
                 </button>
               </div>
             </div>
-            {/* 우: 조판 미리보기 */}
+            {/* Right: typeset preview */}
             <div className="flex min-w-0 flex-1 flex-col bg-gray-200/70">
               <div className="border-b border-black/5 bg-white px-4 py-2 text-xs font-semibold text-ink/55">
-                조판 미리보기
+                Typeset preview
               </div>
               {tplPreview ? (
                 <div data-testid="template-preview" className="flex min-h-0 flex-1 flex-col">
@@ -1164,7 +1164,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 </div>
               ) : (
                 <div className="grid flex-1 place-items-center text-sm text-ink/40">
-                  {tplBusy ? <Loader2 size={18} className="animate-spin text-accent" /> : "템플릿을 선택하세요"}
+                  {tplBusy ? <Loader2 size={18} className="animate-spin text-accent" /> : "Select a template"}
                 </div>
               )}
             </div>
@@ -1172,7 +1172,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* ── 공유·편집 초대 모달 ── */}
+      {/* ── Share / edit invitation modal ── */}
       {shareOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-lightbox-fade">
           <div className="absolute inset-0 bg-ink/45 backdrop-blur-sm" onClick={() => setShareOpen(false)} />
@@ -1181,9 +1181,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-lightbox-zoom"
           >
             <div className="border-b border-black/5 px-6 py-4">
-              <h2 className="font-display text-base font-bold text-ink">공유 · 편집 초대</h2>
+              <h2 className="font-display text-base font-bold text-ink">Share · invite to edit</h2>
               <p className="mt-0.5 text-xs text-ink/45">
-                이 원고는 소유자와 초대된 멤버만 볼 수 있습니다
+                Only the owner and invited members can view this manuscript
               </p>
             </div>
 
@@ -1191,17 +1191,17 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
               {shareInfo && (
                 <>
                   <div>
-                    <p className="text-xs font-semibold text-ink/55">소유자</p>
+                    <p className="text-xs font-semibold text-ink/55">Owner</p>
                     <p className="mt-1.5 text-sm font-medium text-ink">{shareInfo.owner.name}</p>
                   </div>
 
                   <div>
                     <p className="text-xs font-semibold text-ink/55">
-                      {`초대된 멤버 (${shareInfo.collaborators.length})`}
+                      {`Invited members (${shareInfo.collaborators.length})`}
                     </p>
                     {shareInfo.collaborators.length === 0 ? (
                       <p className="mt-1.5 text-xs text-ink/45">
-                        아직 초대한 멤버가 없습니다. 아래에서 함께 쓸 멤버를 초대하세요.
+                        No members invited yet. Invite collaborators below.
                       </p>
                     ) : (
                       <ul className="mt-2 space-y-1.5">
@@ -1218,7 +1218,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                             {shareInfo.can_invite && (
                               <button
                                 onClick={() => void removeCollaborator(c)}
-                                aria-label={`${c.name} 초대 해제`}
+                                aria-label={`Remove ${c.name} from invitees`}
                                 className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink/35 transition hover:bg-red-50 hover:text-red-500"
                               >
                                 <X size={14} />
@@ -1232,7 +1232,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
                   {shareInfo.can_invite && (
                     <div>
-                      <p className="text-xs font-semibold text-ink/55">멤버 초대</p>
+                      <p className="text-xs font-semibold text-ink/55">Invite a member</p>
                       <div className="mt-1.5 flex gap-2">
                         <select
                           value={inviteEmail}
@@ -1240,7 +1240,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                           data-testid="invite-select"
                           className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-accent"
                         >
-                          <option value="">멤버 선택…</option>
+                          <option value="">Select a member…</option>
                           {directory.map((u) => (
                             <option key={u.id} value={u.email}>
                               {u.name ? `${u.name} (${u.email})` : u.email}
@@ -1254,12 +1254,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                           className="btn-dark shrink-0 !px-4 !py-2 text-xs disabled:opacity-50"
                         >
                           {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
-                          초대
+                          Invite
                         </button>
                       </div>
                       <p className="mt-2 text-[11px] leading-relaxed text-ink/45">
-                        초대된 멤버는 이 원고를 보고 편집(잠금 모델)할 수 있습니다.
-                        승인된 멤버만 목록에 나타나며, 관리자는 모든 원고를 볼 수 있습니다.
+                        Invited members can view and edit this manuscript (lock model).
+                        Only approved members appear in the list, and admins can view every manuscript.
                       </p>
                     </div>
                   )}
@@ -1272,14 +1272,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 onClick={() => setShareOpen(false)}
                 className="btn rounded-full border border-black/10 px-5 !py-1.5 text-sm text-ink/60 hover:bg-gray-50"
               >
-                닫기
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── 외부 API 액세스 모달 ── */}
+      {/* ── External API access modal ── */}
       {apiOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-lightbox-fade">
           <div className="absolute inset-0 bg-ink/45 backdrop-blur-sm" onClick={() => setApiOpen(false)} />
@@ -1288,24 +1288,24 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-lightbox-zoom"
           >
             <div className="border-b border-black/5 px-6 py-4">
-              <h2 className="font-display text-base font-bold text-ink">외부 API 액세스</h2>
+              <h2 className="font-display text-base font-bold text-ink">External API access</h2>
               <p className="mt-0.5 text-xs text-ink/45">
-                Claude Code 같은 외부 도구가 이 논문을 직접 읽고 수정할 수 있습니다
+                External tools like Claude Code can read and edit this paper directly
               </p>
             </div>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              {/* 프로젝트 주소 */}
+              {/* Project address */}
               <div>
-                <p className="text-xs font-semibold text-ink/55">이 프로젝트의 API 주소</p>
+                <p className="text-xs font-semibold text-ink/55">API address for this project</p>
                 <div className="mt-1.5 flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2.5 font-mono text-xs text-ink/80">
                   <span data-testid="api-url" className="min-w-0 flex-1 truncate">{`${API_BASE}/api/papers/${paper.key || id}`}</span>
                   <button
                     onClick={async () => {
                       await navigator.clipboard.writeText(`${API_BASE}/api/papers/${paper.key || id}`);
-                      flash("주소를 복사했습니다.");
+                      flash("Address copied.");
                     }}
-                    aria-label="API 주소 복사"
+                    aria-label="Copy API address"
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent"
                   >
                     <Copy size={13} />
@@ -1313,9 +1313,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
 
-              {/* 토큰 */}
+              {/* Token */}
               <div>
-                <p className="text-xs font-semibold text-ink/55">개인 API 토큰</p>
+                <p className="text-xs font-semibold text-ink/55">Personal API token</p>
                 {issuedToken ? (
                   <div className="mt-1.5 rounded-xl border border-accent/25 bg-accent/5 p-4">
                     <div className="flex items-center gap-3 font-mono text-xs text-ink">
@@ -1330,20 +1330,20 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                         className="btn shrink-0 rounded-full border border-accent/30 bg-white !px-3.5 !py-1.5 font-sans text-xs font-semibold text-accent hover:bg-accent/10"
                       >
                         {tokenCopied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                        {tokenCopied ? "복사됨" : "복사"}
+                        {tokenCopied ? "Copied" : "Copy"}
                       </button>
                     </div>
                     <p className="mt-2 text-[11px] text-amber-600">
-                      발급과 동시에 클립보드에 복사되었습니다. 토큰 원문은 서버에 저장되지 않아
-                      이 창을 닫으면 다시 볼 수 없습니다 — 안전한 곳에 보관하세요.
+                      Copied to the clipboard on issue. The raw token is not stored on the server,
+                      so you cannot see it again once you close this window — keep it somewhere safe.
                     </p>
                   </div>
                 ) : tokenStatus?.has_token ? (
                   <p className="mt-1.5 text-xs text-ink/55">
-                    {`발급된 토큰이 있습니다 (${tokenStatus.prefix}…). 원문은 서버에 저장되지 않아 다시 볼 수 없습니다 — 잊었다면 재발급하세요.`}
+                    {`A token has been issued (${tokenStatus.prefix}…). The raw value is not stored on the server, so you cannot view it again — reissue it if you've forgotten it.`}
                   </p>
                 ) : (
-                  <p className="mt-1.5 text-xs text-ink/55">아직 발급된 토큰이 없습니다.</p>
+                  <p className="mt-1.5 text-xs text-ink/55">No token issued yet.</p>
                 )}
                 <div className="mt-2.5 flex gap-2">
                   <button
@@ -1352,42 +1352,42 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                     data-testid="issue-token"
                     className="btn-dark !px-4 !py-1.5 text-xs disabled:opacity-50"
                   >
-                    <KeyRound size={12} /> {tokenStatus?.has_token ? "재발급" : "토큰 발급"}
+                    <KeyRound size={12} /> {tokenStatus?.has_token ? "Reissue" : "Issue token"}
                   </button>
                   {tokenStatus?.has_token && (
                     <button
                       onClick={() => void revokeToken()}
                       className="btn rounded-full border border-red-200 !px-4 !py-1.5 text-xs text-red-500 hover:bg-red-50"
                     >
-                      폐기
+                      Revoke
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* AI 에이전트 연동 — URL+토큰만 주면 자동 */}
+              {/* AI agent integration — just provide the URL + token and it's automatic */}
               <div>
-                <p className="text-xs font-semibold text-ink/55">AI 에이전트 연동</p>
+                <p className="text-xs font-semibold text-ink/55">AI agent integration</p>
                 <p className="mt-1 text-[11px] leading-relaxed text-ink/45">
-                  아래를 Claude Code · OpenAI Codex CLI · Gemini CLI 등에 붙여넣으면 됩니다.
-                  에이전트가 API 응답에 담긴 안내를 따라 사용법을 스스로 파악해 작업합니다 —
-                  별도 설명이 필요 없습니다. (브라우저형 ChatGPT 는 로컬 서버에 접근할 수
-                  없으니 CLI 형 에이전트를 쓰세요.)
+                  Paste the snippet below into Claude Code, OpenAI Codex CLI, Gemini CLI, and the like.
+                  The agent follows the guidance in the API response to figure out how to use it on its own —
+                  no extra explanation needed. (Browser-based ChatGPT cannot reach a local server,
+                  so use a CLI-based agent.)
                 </p>
                 <div className="mt-1.5 flex items-start gap-2 rounded-xl bg-gray-50 p-4">
                   <pre data-testid="agent-prompt" className="min-w-0 flex-1 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-ink/75">
-{`이 Quillo 논문을 작업해줘.
+{`Please work on this Quillo paper.
 - API: ${API_BASE}/api/papers/${paper.key || id}
-- 토큰: ${issuedToken ?? "<발급받은 토큰>"}`}
+- Token: ${issuedToken ?? "<your issued token>"}`}
                   </pre>
                   <button
                     onClick={async () => {
                       await navigator.clipboard.writeText(
-                        `이 Quillo 논문을 작업해줘.\n- API: ${API_BASE}/api/papers/${paper.key || id}\n- 토큰: ${issuedToken ?? "<발급받은 토큰>"}`,
+                        `Please work on this Quillo paper.\n- API: ${API_BASE}/api/papers/${paper.key || id}\n- Token: ${issuedToken ?? "<your issued token>"}`,
                       );
-                      flash("프롬프트를 복사했습니다.");
+                      flash("Prompt copied.");
                     }}
-                    aria-label="에이전트 프롬프트 복사"
+                    aria-label="Copy agent prompt"
                     data-testid="copy-agent-prompt"
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent"
                   >
@@ -1395,10 +1395,10 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-ink/45">
-                  외부 수정도 같은 잠금 모델을 따르므로, 누군가 편집 중이면 쓰기가 거절됩니다(423).
-                  사용법 전문을 직접 보려면{" "}
+                  External edits follow the same lock model, so writes are rejected while someone is editing (423).
+                  To read the full usage guide directly, see{" "}
                   <span className="font-mono text-ink/55">{`${API_BASE}/api/papers/${paper.key || id}/guide`}</span>
-                  {" "}(Bearer 토큰 필요).
+                  {" "}(Bearer token required).
                 </p>
               </div>
             </div>
@@ -1408,16 +1408,16 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 onClick={() => setApiOpen(false)}
                 className="btn rounded-full border border-black/10 px-5 !py-1.5 text-sm text-ink/60 hover:bg-gray-50"
               >
-                닫기
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── 본문: 트리 + 에디터 (+미리보기) ── */}
+      {/* ── Main: tree + editor (+ preview) ── */}
       <div ref={splitRef} className="flex min-h-0 flex-1">
-        {/* 파일 트리 사이드바 */}
+        {/* File tree sidebar */}
         <aside
           data-testid="paper-tree"
           onDragOver={(e) => {
@@ -1433,7 +1433,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             setDragging(false);
             setDropTarget(null);
             const fid = e.dataTransfer.getData("application/x-quillo-file");
-            if (fid) void moveEntry(Number(fid), ""); // 빈 영역에 놓으면 최상위로
+            if (fid) void moveEntry(Number(fid), ""); // dropping on empty space moves to the top level
             else if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files);
           }}
           className={`relative flex w-64 shrink-0 flex-col border-r border-black/10 bg-ink transition ${
@@ -1444,12 +1444,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Files</span>
             {editable && (
               <div className="flex gap-1">
-                {/* 호버 즉시 뜨는 커스텀 툴팁 — 느린 네이티브 title 대신 */}
+                {/* Custom tooltip that appears instantly on hover — instead of the slow native title */}
                 {(
                   [
-                    { label: "새 파일", hint: "경로를 쓰면 폴더도 함께 생성", Icon: FilePlus, act: () => { setCreating("text"); setNewPath(""); } },
-                    { label: "새 폴더", hint: "예: figures", Icon: FolderPlus, act: () => { setCreating("folder"); setNewPath(""); } },
-                    { label: "이미지 업로드", hint: "드래그&드롭도 가능", Icon: UploadCloud, act: () => uploadRef.current?.click() },
+                    { label: "New file", hint: "Include a path to create folders too", Icon: FilePlus, act: () => { setCreating("text"); setNewPath(""); } },
+                    { label: "New folder", hint: "e.g. figures", Icon: FolderPlus, act: () => { setCreating("folder"); setNewPath(""); } },
+                    { label: "Upload image", hint: "Drag & drop also works", Icon: UploadCloud, act: () => uploadRef.current?.click() },
                   ] as const
                 ).map(({ label, hint, Icon, act }) => (
                   <button
@@ -1501,12 +1501,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
           {editable && (
             <p className="border-t border-white/10 px-4 py-2.5 text-[10px] leading-relaxed text-white/30">
-              이미지를 이 영역에 끌어다 놓으면 업로드됩니다
+              Drag images into this area to upload them
             </p>
           )}
         </aside>
 
-        {/* 에디터 / 미리보기 */}
+        {/* Editor / preview */}
         <main className="relative flex min-w-0 flex-1 flex-col bg-white">
           {viewRev ? (
             <div data-testid="diff-view" className="flex min-h-0 flex-1 flex-col">
@@ -1514,9 +1514,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 <History size={14} className="text-accent" />
                 <span className="font-mono text-xs font-semibold text-ink">{viewRev.path}</span>
                 <span className="text-xs text-ink/45">
-                  {`${viewRev.author_name} · ${revTime(viewRev.created_at)} 버전`}
+                  {`${viewRev.author_name} · ${revTime(viewRev.created_at)} version`}
                 </span>
-                <span className="text-[11px] text-ink/35">초록 줄이 추가, 빨간 줄이 삭제된 부분입니다</span>
+                <span className="text-[11px] text-ink/35">Green lines were added, red lines were removed</span>
                 <div className="ml-auto flex items-center gap-2">
                   {editable && (
                     <button
@@ -1524,14 +1524,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       data-testid="restore-revision"
                       className="btn rounded-full border border-accent/30 bg-accent/5 !px-3.5 !py-1 text-xs font-semibold text-accent hover:bg-accent/10"
                     >
-                      이 버전으로 되돌리기
+                      Revert to this version
                     </button>
                   )}
                   <button
                     onClick={() => setViewRev(null)}
                     className="btn rounded-full border border-black/10 !px-3.5 !py-1 text-xs text-ink/60 hover:bg-white"
                   >
-                    에디터로 돌아가기
+                    Back to editor
                   </button>
                 </div>
               </div>
@@ -1556,7 +1556,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : active == null ? (
             <div className="grid flex-1 place-items-center text-sm text-ink/35">
-              왼쪽에서 파일을 선택하세요
+              Select a file on the left
             </div>
           ) : active.kind === "image" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-5 p-8">
@@ -1572,13 +1572,13 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}
-                  aria-label="삽입 코드 복사"
+                  aria-label="Copy insert code"
                   className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent"
                 >
                   {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                 </button>
               </div>
-              <p className="text-xs text-ink/40">위 코드를 .tex 파일에 붙여넣으면 이 그림이 삽입됩니다</p>
+              <p className="text-xs text-ink/40">Paste the code above into a .tex file to insert this image</p>
             </div>
           ) : (
             <>
@@ -1586,7 +1586,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 <span className="font-mono text-xs text-ink/50">{active.path}</span>
                 {editable && (
                   <span className={`text-[11px] font-medium ${dirty ? "text-accent" : "text-ink/35"}`}>
-                    {dirty ? "● 수정됨" : "저장됨"}
+                    {dirty ? "● Modified" : "Saved"}
                   </span>
                 )}
               </div>
@@ -1608,24 +1608,24 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                   onMouseUp={readSelection}
                   className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-5 font-mono text-[13px] leading-relaxed text-ink/75"
                 >
-                  {content ? <LatexHighlight value={content} /> : "빈 파일입니다."}
+                  {content ? <LatexHighlight value={content} /> : "This file is empty."}
                 </pre>
               )}
-              {/* 선택 영역 → 코멘트 추가 (읽기 전용에서도 가능 — 리뷰 시나리오) */}
+              {/* Selection → add comment (also works in read-only — review scenario) */}
               {selRange && active?.kind === "text" && (
                 <button
                   onClick={startComment}
                   data-testid="add-comment"
                   className="btn absolute right-4 top-24 z-10 rounded-full bg-ink !px-4 !py-2 text-xs font-semibold text-white shadow-xl hover:bg-ink/90"
                 >
-                  <MessageSquare size={13} /> 선택 구간에 코멘트
+                  <MessageSquare size={13} /> Comment on selection
                 </button>
               )}
             </>
           )}
         </main>
 
-        {/* 버전 히스토리 패널 */}
+        {/* Version history panel */}
         {historyOpen && (
           <aside
             data-testid="history-panel"
@@ -1633,15 +1633,15 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           >
             <div className="flex items-center justify-between border-b border-black/5 px-4 py-2.5">
               <div>
-                <p className="text-xs font-semibold text-ink/70">버전 히스토리</p>
-                <p className="mt-0.5 text-[10px] text-ink/40">컴파일할 때마다 변경된 파일이 기록됩니다</p>
+                <p className="text-xs font-semibold text-ink/70">Version history</p>
+                <p className="mt-0.5 text-[10px] text-ink/40">Changed files are recorded on every compile</p>
               </div>
               <button
                 onClick={() => {
                   setHistoryOpen(false);
                   setViewRev(null);
                 }}
-                aria-label="히스토리 패널 닫기"
+                aria-label="Close history panel"
                 className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 hover:bg-gray-100"
               >
                 <X size={14} />
@@ -1654,7 +1654,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 </div>
               ) : historyList.length === 0 ? (
                 <p className="px-2 py-8 text-center text-xs leading-relaxed text-ink/40">
-                  아직 기록이 없습니다. 컴파일하면 그 시점의 변경이 저장됩니다.
+                  No records yet. Compiling saves the changes at that point.
                 </p>
               ) : (
                 historyList.map((rev) => (
@@ -1675,7 +1675,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       <span className="ml-auto flex shrink-0 gap-1">
                         {rev.first ? (
                           <span className="rounded-full bg-ink/5 px-1.5 py-0.5 text-[10px] font-semibold text-ink/45">
-                            처음
+                            First
                           </span>
                         ) : (
                           <>
@@ -1700,7 +1700,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           </aside>
         )}
 
-        {/* 리뷰 코멘트 패널 */}
+        {/* Review comments panel */}
         {commentsOpen && (
           <aside
             data-testid="comments-panel"
@@ -1708,12 +1708,12 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           >
             <div className="flex items-center justify-between border-b border-black/5 px-4 py-2.5">
               <div>
-                <p className="text-xs font-semibold text-ink/70">리뷰 코멘트</p>
+                <p className="text-xs font-semibold text-ink/70">Review comments</p>
                 <p className="mt-0.5 truncate font-mono text-[10px] text-ink/40">{active?.path ?? ""}</p>
               </div>
               <button
                 onClick={() => setCommentsOpen(false)}
-                aria-label="코멘트 패널 닫기"
+                aria-label="Close comments panel"
                 className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 hover:bg-gray-100"
               >
                 <X size={14} />
@@ -1721,7 +1721,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3.5">
-              {/* 새 코멘트 작성 */}
+              {/* Compose a new comment */}
               {draft && (
                 <div className="rounded-xl border border-accent/30 bg-accent/5 p-3.5">
                   <p className="line-clamp-2 rounded-lg bg-white px-2.5 py-1.5 font-mono text-[11px] text-ink/60 ring-1 ring-black/5">
@@ -1731,7 +1731,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                     autoFocus
                     value={draftBody}
                     onChange={(e) => setDraftBody(e.target.value)}
-                    placeholder="코멘트를 입력하세요"
+                    placeholder="Enter a comment"
                     data-testid="comment-input"
                     rows={3}
                     className="mt-2 w-full resize-none rounded-lg border border-black/10 px-2.5 py-2 text-xs outline-none focus:border-accent"
@@ -1741,7 +1741,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       onClick={() => setDraft(null)}
                       className="btn rounded-full border border-black/10 !px-3 !py-1 text-[11px] text-ink/55"
                     >
-                      취소
+                      Cancel
                     </button>
                     <button
                       onClick={() => void submitComment()}
@@ -1749,7 +1749,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                       data-testid="submit-comment"
                       className="btn-dark !px-3.5 !py-1 text-[11px] disabled:opacity-50"
                     >
-                      등록
+                      Post
                     </button>
                   </div>
                 </div>
@@ -1757,8 +1757,8 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
 
               {fileComments.length === 0 && !draft && (
                 <p className="px-2 py-8 text-center text-xs leading-relaxed text-ink/40">
-                  본문에서 구간을 선택하면 코멘트를 달 수 있습니다.
-                  편집 잠금이 없어도 (리뷰 중에도) 가능합니다.
+                  Select a range in the body to leave a comment.
+                  This works even without an edit lock (during review too).
                 </p>
               )}
 
@@ -1782,7 +1782,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                         <span className="text-[10px] text-ink/35">{c.created_at.slice(0, 10)}</span>
                         {c.status === "resolved" && (
                           <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                            해결됨
+                            Resolved
                           </span>
                         )}
                       </div>
@@ -1790,10 +1790,10 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                         <button
                           onClick={() => jumpToComment(c)}
                           disabled={!anchored || !editable}
-                          title={anchored ? "본문에서 위치 보기" : "원문이 변경되어 위치를 찾을 수 없습니다"}
+                          title={anchored ? "View location in the body" : "The original text changed, so the location can't be found"}
                           className="mt-1.5 block w-full truncate rounded-lg bg-amber-50 px-2.5 py-1.5 text-left font-mono text-[11px] text-amber-800/80 ring-1 ring-amber-100 disabled:cursor-default"
                         >
-                          {anchored ? c.quote : `(원문 변경됨) ${c.quote}`}
+                          {anchored ? c.quote : `(original text changed) ${c.quote}`}
                         </button>
                       )}
                       <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-ink/75">{c.body}</p>
@@ -1803,15 +1803,15 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                           data-testid="resolve-comment"
                           className="btn rounded-full border border-black/10 !px-2.5 !py-0.5 text-[10px] text-ink/55 hover:bg-gray-50"
                         >
-                          <Check size={11} /> {c.status === "open" ? "해결" : "다시 열기"}
+                          <Check size={11} /> {c.status === "open" ? "Resolve" : "Reopen"}
                         </button>
                         {canDelete && (
                           <button
                             onClick={() => void deleteComment(c)}
-                            aria-label="코멘트 삭제"
+                            aria-label="Delete comment"
                             className="btn rounded-full border border-black/10 !px-2.5 !py-0.5 text-[10px] text-ink/45 hover:bg-red-50 hover:text-red-500"
                           >
-                            <Trash2 size={11} /> 삭제
+                            <Trash2 size={11} /> Delete
                           </button>
                         )}
                       </div>
@@ -1822,7 +1822,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           </aside>
         )}
 
-        {/* 드래그 분할바 */}
+        {/* Draggable split bar */}
         <div
           data-testid="split-divider"
           onPointerDown={startSplitDrag}
@@ -1831,7 +1831,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-black/10 transition group-hover:w-1 group-hover:bg-accent/50" />
         </div>
 
-        {/* PDF 미리보기 패널 — 상시 표시 */}
+        {/* PDF preview panel — always visible */}
         <section
           data-testid="preview-panel"
           style={{ width: `${previewPct}%` }}
@@ -1840,10 +1840,10 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             <div className="flex items-center justify-between border-b border-black/5 bg-white px-4 py-2">
               <span data-testid="preview-entry" className="text-xs font-semibold text-ink/55">
                 {preview?.error
-                  ? "컴파일 오류"
+                  ? "Compile error"
                   : compiledEntry !== "main.tex"
-                    ? `PDF 미리보기 · ${compiledEntry}`
-                    : "PDF 미리보기"}
+                    ? `PDF preview · ${compiledEntry}`
+                    : "PDF preview"}
               </span>
               <div className="flex items-center gap-1">
                 {preview?.url && (
@@ -1855,16 +1855,16 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                         a.download = `${(paper?.title ?? "paper").replace(/\s+/g, "_")}.pdf`;
                         a.click();
                       }}
-                      aria-label="PDF 다운로드"
-                      title="PDF 다운로드"
+                      aria-label="Download PDF"
+                      title="Download PDF"
                       className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent"
                     >
                       <Download size={13} />
                     </button>
                     <button
                       onClick={() => window.open(preview.url, "_blank")}
-                      aria-label="인쇄"
-                      title="새 탭에서 열기 (인쇄)"
+                      aria-label="Print"
+                      title="Open in a new tab (print)"
                       className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent"
                     >
                       <Printer size={13} />
@@ -1875,7 +1875,7 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 <button
                   onClick={() => void compile()}
                   disabled={compiling}
-                  aria-label="다시 컴파일"
+                  aria-label="Recompile"
                   className="grid h-7 w-7 place-items-center rounded-lg text-ink/40 transition hover:bg-accent/10 hover:text-accent disabled:opacity-50"
                 >
                   <RefreshCw size={13} className={compiling ? "animate-spin" : ""} />
@@ -1894,10 +1894,10 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
               <div className="grid min-h-0 flex-1 place-items-center bg-gray-200/70 text-sm text-ink/40">
                 {compiling ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin text-accent" /> 컴파일 중…
+                    <Loader2 size={16} className="animate-spin text-accent" /> Compiling…
                   </span>
                 ) : (
-                  "컴파일하면 미리보기가 표시됩니다"
+                  "Compile to show the preview"
                 )}
               </div>
             )}

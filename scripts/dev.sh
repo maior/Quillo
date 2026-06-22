@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 로컬 개발: 백엔드(:8675, --reload) + 프론트엔드(:8678, dev) 포그라운드 동시 실행.
-# Ctrl-C 로 둘 다 종료. (운영 기동은 scripts/start.sh)
+# Local development: run backend (:8675, --reload) + frontend (:8678, dev) concurrently in the foreground.
+# Ctrl-C stops both. (For production startup, use scripts/start.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

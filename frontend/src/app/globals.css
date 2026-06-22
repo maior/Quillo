@@ -20,7 +20,7 @@
     @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
   }
 
-  /* 섹션 상단 작은 라벨(eyebrow) */
+  /* Small label at the top of a section (eyebrow) */
   .eyebrow {
     @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent;
   }
@@ -29,12 +29,12 @@
     @apply h-px w-6 bg-accent/50;
   }
 
-  /* 그라데이션 텍스트 */
+  /* Gradient text */
   .text-gradient {
     @apply bg-gradient-to-r from-white via-white to-accent-cyan bg-clip-text text-transparent;
   }
 
-  /* 회로 그리드 배경 (히어로/다크 섹션용) */
+  /* Circuit grid background (for hero/dark sections) */
   .grid-pattern {
     background-image:
       linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),

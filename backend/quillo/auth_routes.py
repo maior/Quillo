@@ -1,6 +1,6 @@
-"""Standalone 인증 라우트 — 세션 로그인 + 외부 도구용 Bearer API 토큰.
+"""Standalone authentication routes — session login + Bearer API tokens for external tools.
 
-호스트(mspl 등)에 임베드할 때는 이 라우터를 마운트하지 않고, 호스트의 인증을 쓴다.
+When embedding into a host (such as mspl), do not mount this router; use the host's authentication instead.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)) -> m
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.status == "pending":
-        raise HTTPException(status_code=403, detail="관리자 승인 후 로그인할 수 있습니다.")
+        raise HTTPException(status_code=403, detail="You can log in after an administrator approves your account.")
     token = create_session(db, user.id)
     response.set_cookie(
         SESSION_COOKIE,
@@ -79,7 +79,7 @@ def me(user: models.User = Depends(get_current_user)) -> models.User:
 def list_active_users(
     db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
 ) -> list[dict]:
-    """초대 대상 선택용 활성 사용자 목록 — id·이름·이메일만."""
+    """List of active users for selecting invitees — id, name, and email only."""
     rows = db.scalars(
         select(models.User).where(models.User.status == "active").order_by(models.User.name)
     )
@@ -90,7 +90,7 @@ def list_active_users(
 def issue_api_token(
     db: Session = Depends(get_db), user: models.User = Depends(get_current_user)
 ) -> dict:
-    """개인 API 토큰 발급 — 기존 토큰은 폐기되고 원문은 이번 응답에서만 노출된다."""
+    """Issue a personal API token — any existing token is revoked, and the plaintext is exposed only in this response."""
     token = "quillo_" + secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc).isoformat()
     rec = db.scalar(select(models.ApiToken).where(models.ApiToken.user_id == user.id))

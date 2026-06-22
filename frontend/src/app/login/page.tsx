@@ -23,7 +23,7 @@ export default function LoginPage() {
       await authApi.login(email, password);
       router.push("/papers");
     } catch (err) {
-      setError((err as Error).message || "로그인에 실패했습니다");
+      setError((err as Error).message || "Login failed");
       setBusy(false);
     }
   }
@@ -36,11 +36,11 @@ export default function LoginPage() {
       >
         <div className="space-y-1 text-center">
           <h1 className="font-display text-2xl font-bold text-slate-900">Quillo</h1>
-          <p className="text-sm text-slate-500">협업 LaTeX 논문 워크스페이스</p>
+          <p className="text-sm text-slate-500">Collaborative LaTeX Paper Workspace</p>
         </div>
 
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-700">이메일</span>
+          <span className="text-sm font-medium text-slate-700">Email</span>
           <input
             type="email"
             value={email}
@@ -51,7 +51,7 @@ export default function LoginPage() {
         </label>
 
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-slate-700">비밀번호</span>
+          <span className="text-sm font-medium text-slate-700">Password</span>
           <input
             type="password"
             value={password}
@@ -69,7 +69,7 @@ export default function LoginPage() {
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-          로그인
+          Sign in
         </button>
 
         {DEV && (
@@ -82,7 +82,7 @@ export default function LoginPage() {
             }}
             className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-xs text-slate-500 hover:bg-slate-50"
           >
-            (dev) 테스트 관리자 채우기 — {TEST_ADMIN.email}
+            (dev) Fill test admin — {TEST_ADMIN.email}
           </button>
         )}
       </form>

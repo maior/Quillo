@@ -17,11 +17,11 @@ const display = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: {
-    default: "Quillo — 협업 LaTeX 논문 워크스페이스",
+    default: "Quillo — Collaborative LaTeX Paper Workspace",
     template: "%s · Quillo",
   },
   description:
-    "Quillo — Overleaf 스타일 협업 LaTeX 에디터. 사람과 AI 에이전트가 함께 논문을 쓰고 컴파일한다.",
+    "Quillo — an Overleaf-style collaborative LaTeX editor. People and AI agents write and compile papers together.",
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko" className={`${inter.variable} ${display.variable}`}>
+    <html lang="en" className={`${inter.variable} ${display.variable}`}>
       <body className="flex min-h-screen flex-col font-sans">
         <main className="flex-1">{children}</main>
       </body>
