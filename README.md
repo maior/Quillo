@@ -59,12 +59,23 @@ Default credentials are `admin@quillo.local` / `change-me-quillo`. **Change them
 ### Running in the background (production-ish)
 
 ```bash
-scripts/start.sh      # starts both services detached, logs to logs/
-scripts/stop.sh       # stops them
+scripts/start.sh      # builds the frontend if needed, then starts both services detached
+scripts/stop.sh       # stops both (kills whatever holds :8675 / :8678)
 scripts/restart.sh    # git pull + restart
 ```
 
+`start.sh` runs a production build automatically when one is missing (it checks for
+`.next/BUILD_ID`, so a leftover dev build is rebuilt) and writes:
+
+- logs → `logs/backend.log`, `logs/frontend.log`
+- PIDs → `logs/backend.pid`, `logs/frontend.pid`
+
+```bash
+tail -f logs/backend.log logs/frontend.log   # follow both logs
+```
+
 > In production the backend runs `uvicorn` **without** `--reload` (only `dev.sh` enables reload).
+> The `logs/` directory is git-ignored.
 
 ---
 
