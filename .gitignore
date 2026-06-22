@@ -1,0 +1,23 @@
+# 의존성·빌드 산출물
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+backend/.venv/
+backend/*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 운영 데이터 — DB 와 업로드 파일은 저장소에 넣지 않는다
+backend/quillo.db
+backend/uploads/
+
+# 로컬 환경·로그
+frontend/.env.local
+.env
+.DS_Store
+nohup.out
+logs/
+
+# Claude 로컬 설정만 제외 (CLAUDE.md 는 프로젝트 컨텍스트로 커밋)
+.claude/settings.local.json

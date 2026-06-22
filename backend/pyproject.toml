@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quillo"
+version = "1.0.0"
+description = "Quillo — 협업 LaTeX 논문 워크스페이스 (추출 가능한 FastAPI 패키지)"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.10",
+    "python-multipart>=0.0.20",
+]
+
+# 패키지 디렉터리: quillo/ (papers_routes, templates_routes, models, ...)
+[tool.setuptools]
+packages = ["quillo"]
+
+# 템플릿(.tex/.cls/.sty/manifest)도 패키지 데이터로 포함
+[tool.setuptools.package-data]
+quillo = ["seed_data/templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

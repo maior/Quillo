@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white text-ink antialiased;
+    font-feature-settings: "cv05", "ss01";
+  }
+  ::selection {
+    @apply bg-accent/20;
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  /* 섹션 상단 작은 라벨(eyebrow) */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-accent;
+  }
+  .eyebrow::before {
+    content: "";
+    @apply h-px w-6 bg-accent/50;
+  }
+
+  /* 그라데이션 텍스트 */
+  .text-gradient {
+    @apply bg-gradient-to-r from-white via-white to-accent-cyan bg-clip-text text-transparent;
+  }
+
+  /* 회로 그리드 배경 (히어로/다크 섹션용) */
+  .grid-pattern {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(80% 80% at 50% 0%, #000 40%, transparent 100%);
+    mask-image: radial-gradient(80% 80% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent/90 hover:shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border border-white/25 text-white hover:bg-white/10;
+  }
+  .btn-dark {
+    @apply btn bg-ink text-white hover:bg-ink-700;
+  }
+}
