@@ -23,7 +23,9 @@ if port_busy 8678; then
   echo "  ↳ 8678 already in use — skipping (recommend restarting after stop.sh)"
 else
   cd "$ROOT/frontend"
-  [ -d .next ] || { echo "  ↳ no .next → running build first"; npm run build; }
+  # Require a real production build: a dev/partial .next has no BUILD_ID and
+  # would make `next start` fail, so rebuild whenever BUILD_ID is missing.
+  [ -f .next/BUILD_ID ] || { echo "  ↳ no production build → running build first"; npm run build; }
   nohup npm run start > "$LOG/frontend.log" 2>&1 &
   echo $! > "$LOG/frontend.pid"
 fi

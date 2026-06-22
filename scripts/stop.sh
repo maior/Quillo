@@ -12,7 +12,7 @@ kill_port() {
     kill $pids 2>/dev/null || true
     sleep 1
     pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
-    [ -n "$pids" ] && { echo "  ↳ force kill"; kill -9 $pids 2>/dev/null || true; }
+    if [ -n "$pids" ]; then echo "  ↳ force kill"; kill -9 $pids 2>/dev/null || true; fi
   else
     echo "□ :$port not running"
   fi
