@@ -1,47 +1,232 @@
 # Quillo
 
-협업 LaTeX 논문 워크스페이스 — Overleaf 스타일 에디터에 **AI 에이전트 협업**을 더한 도구.
-URL + 토큰만으로 Claude Code·Codex CLI 같은 에이전트가 직접 원고를 읽고·수정하고·컴파일한다.
+**A self-hosted, Overleaf-style collaborative LaTeX workspace that your own AI coding agent can read, edit, and compile — over a single URL + token.**
 
-| 영역 | 스택 | 포트 |
+Overleaf is great for writing papers with people, but it locks your manuscript inside a SaaS that *your* LLM cannot reach. Quillo flips that: it is a real-time LaTeX editor **and** a clean HTTP API designed so that the agent you already use — **Claude Code, Codex CLI, Cursor, or any tool that can send an HTTP request** — can open your paper, fix the bibliography, rewrite a section, compile to PDF, and leave review comments, all without copy-pasting `.tex` files back and forth.
+
+You bring your own model. Quillo just makes the paper reachable.
+
+| Layer | Stack | Default port |
 |---|---|---|
-| 백엔드 | FastAPI + SQLAlchemy 2.0 + SQLite | 8675 |
-| 프론트엔드 | Next.js (App Router) + TypeScript + Tailwind | 8678 |
+| Backend | FastAPI · SQLAlchemy 2.0 · SQLite | **8675** |
+| Frontend | Next.js (App Router) · TypeScript · Tailwind | **8678** |
 
-SKKU MSPL 프로젝트에서 추출한 독립 저장소로, **논문 편집툴의 정본**이다.
+> Status: extracted as a standalone repo from the SKKU MSPL project. **This repository is the source of truth for the editor.**
 
-## 빠른 시작
+---
+
+## Why Quillo
+
+- **Bring-your-own-LLM.** No vendor AI lock-in. Any agent with a bearer token can drive the editor through a documented REST API. The agent can even fetch its own instructions: `GET /api/papers/{key}/guide` returns a Markdown playbook.
+- **Human + agent on the same document.** A 30-minute edit lock keeps a human and an agent from clobbering each other. Review comments don't need the lock, so an agent can leave suggestions while you keep typing.
+- **Real LaTeX, real PDFs.** Server-side `xelatex` (Unicode-native, CJK-friendly) with optional `bibtex`. Every compile auto-snapshots changed files into version history with line-level diffs.
+- **Self-hosted & private.** SQLite + local file storage. Your manuscripts never leave your machine. Clone, run, done.
+- **Batteries included.** 26 LaTeX templates, image uploads, project ZIP export, collaborator invites, and draft → submitted → revision → published status tracking.
+
+---
+
+## Quick start
+
+Requirements: **Python 3.11+**, **Node 18+**, and (for PDF compilation) a TeX distribution providing **`xelatex`** — e.g. TeX Live or MacTeX. `bibtex` is optional.
 
 ```bash
-scripts/setup.sh      # 최초 1회 — venv·의존성·editable 설치 + 프론트 빌드
-scripts/dev.sh        # 로컬 개발 (Ctrl-C 동시 종료)
-scripts/start.sh      # 운영 백그라운드 기동 (로그 logs/)
-scripts/stop.sh
-scripts/restart.sh    # git pull 후 재시작
+git clone https://github.com/maior/Quillo.git
+cd Quillo
+
+scripts/setup.sh      # one-time: venv + pip + editable install, npm install + build
+scripts/dev.sh        # local dev (backend --reload + frontend dev; Ctrl-C stops both)
 ```
 
-- 사이트: http://localhost:8678 · API 문서: http://localhost:8675/docs
-- 첫 기동 시 `backend/quillo.db` 자동 생성, 관리자 1명 시드
-  (env `QUILLO_ADMIN_EMAIL`/`QUILLO_ADMIN_PASSWORD`, 기본 `admin@quillo.local`/`change-me-quillo` — **운영 전 변경**)
-- LaTeX 컴파일에는 `xelatex` 필요(+ 선택 `bibtex`)
+Then open:
 
-## 테스트
+- **App** → http://localhost:8678
+- **Interactive API docs (Swagger)** → http://localhost:8675/docs
+
+On first boot the backend creates `backend/quillo.db` and seeds one admin account.
+Configure it via environment variables **before** the first run:
 
 ```bash
-cd backend && .venv/bin/python -m pytest      # 추출 스모크 테스트 (인메모리 SQLite)
-cd frontend && npm run build                  # 타입·빌드 검증
+export QUILLO_ADMIN_EMAIL="you@example.com"
+export QUILLO_ADMIN_PASSWORD="a-strong-password"   # default: change-me-quillo — CHANGE THIS
 ```
 
-## 외부 API (AI 에이전트용)
+Default credentials are `admin@quillo.local` / `change-me-quillo`. **Change them before exposing the server.**
 
-1. 웹에서 로그인 → API 토큰 발급(`POST /api/auth/token`, 원문은 1회만 노출)
-2. 에이전트가 `Authorization: Bearer <token>` 으로 호출:
-   - `GET /api/papers/{key}` 원고 조회 · `GET /api/papers/{key}/guide` 사용법
-   - 파일 읽기/쓰기, `POST /api/papers/{key}/compile` 컴파일
-3. 모든 외부 주소는 순번 id 가 아닌 불투명 해시 `key` 를 쓴다.
+### Running in the background (production-ish)
 
-## mspl 과의 관계
+```bash
+scripts/start.sh      # starts both services detached, logs to logs/
+scripts/stop.sh       # stops them
+scripts/restart.sh    # git pull + restart
+```
 
-이 저장소가 정본이며 mspl 은 이것을 **참조**한다(형제 폴더 `skku/quillo`, `skku/mspl`).
-Quillo 업그레이드가 mspl 에 자동 반영되도록 연결하는 절차는 `.claude/CLAUDE.md` 와
-mspl 의 `docs/QUILLO_LINK.md` 참고.
+> In production the backend runs `uvicorn` **without** `--reload` (only `dev.sh` enables reload).
+
+---
+
+## Using the web UI
+
+1. Log in at http://localhost:8678 with your admin credentials.
+2. **New paper** → you get a project that starts from a `main.tex` skeleton.
+3. Edit `main.tex` (and add `sections/*.tex`, figures, `.bib`, etc.) in the LaTeX editor.
+4. Click **Compile** to render a PDF preview (requires `xelatex`).
+5. **Invite collaborators** by email; share **review comments** on any text selection.
+6. Optionally **apply a template** (26 included) or **export** the whole project as a ZIP.
+
+---
+
+## Connecting your AI agent
+
+This is the part Overleaf can't do. Any agent that can make HTTP requests becomes a co-author.
+
+### 1. Get a personal API token
+
+In the web UI, issue a token (or call the API directly). The raw token is shown **once** — store it securely.
+
+```bash
+# Log in to obtain a session cookie
+curl -s -c cookies.txt -X POST http://localhost:8675/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"a-strong-password"}'
+
+# Issue a bearer token (revokes any previous one; raw value returned only here)
+curl -s -b cookies.txt -X POST http://localhost:8675/api/auth/token
+# → {"token":"quillo_xxxxxxxx...","prefix":"quillo_xxx"}
+```
+
+Tokens are stored only as a SHA-256 hash and carry the **same permissions as your session**.
+
+### 2. Point the agent at a paper
+
+Every external URL uses an **opaque `key`** (not a sequential id). Grab the agent playbook for a paper — it documents every endpoint the agent needs, in context:
+
+```bash
+TOKEN="quillo_xxxxxxxx..."
+KEY="<paper key from its URL>"
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8675/api/papers/$KEY/guide
+```
+
+A typical instruction to your agent:
+
+> "Read the Quillo guide at `http://localhost:8675/api/papers/<KEY>/guide` using bearer token `<TOKEN>`, then tighten the abstract and fix any LaTeX that fails to compile. Leave the rest of the paper unchanged."
+
+### 3. The agent's edit loop
+
+All write operations require holding the edit lock; writing without it is rejected with **423**.
+
+```text
+POST   /api/papers/{key}/lock                   # acquire lock (409 if someone else holds it)
+GET    /api/papers/{key}/files                  # list files [{id, path, kind}]
+GET    /api/papers/{key}/files/{file_id}        # read content
+PUT    /api/papers/{key}/files/{file_id}        # replace content  {"content": "..."}
+POST   /api/papers/{key}/files                  # create file  {"path","kind","content"}
+POST   /api/papers/{key}/compile                # xelatex → PDF (422 + log on error)
+POST   /api/papers/{key}/unlock                 # release lock when done
+```
+
+The lock auto-expires after 30 minutes and renews on each save. On a compile error the endpoint returns **422** with the LaTeX log — the agent reads the `!` lines, fixes the source, and recompiles. Every compile snapshots changed files into history (`GET /history`, line-level diffs, `restore`).
+
+### 4. Review without editing
+
+Comments don't need the lock, so an agent can critique while a human writes:
+
+```text
+GET    /api/papers/{key}/comments?file_id={id}  # status: open | resolved
+POST   /api/papers/{key}/comments               # {"file_id","quote","anchor","body"}
+PUT    /api/papers/{key}/comments/{id}          # {"status":"resolved"}
+```
+
+### Agent rules of the road
+
+- The entry point is always `main.tex`. Don't delete bundled `.sty` / `.cls` files.
+- Images upload via multipart `POST /files/upload` (`jpg/png/gif/webp/pdf/eps`, ≤ 20 MB).
+- Compile with `?entry=<path>` to preview a single file; if it has no `\documentclass`, Quillo borrows `main.tex`'s preamble.
+- Always finish by compiling (verify the PDF builds) and then unlocking.
+
+---
+
+## API surface
+
+Full interactive docs at `/docs`. Highlights:
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /api/auth/login` · `POST /logout` · `GET /me` · `GET/POST/DELETE /api/auth/token` |
+| Papers | `GET/POST /api/papers` · `GET/PUT/DELETE /api/papers/{key}` |
+| Locking | `POST /{key}/lock` · `POST /{key}/unlock` |
+| Files | `GET/POST /{key}/files` · `GET/PUT/DELETE /{key}/files/{id}` · `POST /{key}/files/upload` · `GET /{key}/export` |
+| Compile | `POST /{key}/compile` |
+| History | `GET /{key}/history` · `GET /{key}/history/{rev}` · `POST /{key}/history/{rev}/restore` |
+| Comments | `GET/POST /{key}/comments` · `PUT/DELETE /{key}/comments/{id}` |
+| Collaborators | `GET/POST /{key}/collaborators` · `DELETE /{key}/collaborators/{id}` |
+| Templates | `GET /api/templates` · `POST /api/templates/{key}/preview` · `POST /api/papers/{key}/apply-template` |
+| Agent guide | `GET /{key}/guide` (Markdown) |
+
+Access control: a manuscript is visible only to its **owner + invited collaborators + admin**.
+
+---
+
+## Project layout
+
+```
+quillo/
+├── backend/                      # FastAPI app, pip-installable package "quillo"
+│   ├── pyproject.toml            # editable-install target
+│   ├── quillo/
+│   │   ├── main.py               # standalone app (:8675), create_app(), init_db()
+│   │   ├── database.py           # Base / engine / SessionLocal / get_db
+│   │   ├── models.py             # User / AuthSession / ApiToken + 5 Paper tables
+│   │   ├── security.py           # PBKDF2 + session cookie & bearer token, get_current_user
+│   │   ├── auth_routes.py        # /api/auth
+│   │   ├── papers_routes.py      # /api/papers (CRUD, files, lock, comments, history, compile, export, guide)
+│   │   ├── templates_routes.py   # /api/templates (26 templates)
+│   │   └── seed_data/templates/  # LaTeX templates (manifest.json + .tex/.cls/.sty)
+│   └── tests/                    # smoke tests (in-memory SQLite)
+├── frontend/src/                 # Next.js app, editor components, lib/api.ts
+└── scripts/                      # setup · dev · start · stop · restart
+```
+
+---
+
+## Testing
+
+```bash
+cd backend && .venv/bin/python -m pytest      # backend smoke tests (in-memory SQLite)
+cd frontend && npm run build                  # type-check + production build
+```
+
+> Don't run `next build` while the dev server is running — it corrupts `.next` and breaks CSS.
+
+---
+
+## Authentication model
+
+- **Session cookie** `quillo_session` (14 days) for the web UI.
+- **Bearer API token** (`quillo_…`, only its SHA-256 hash is stored) for external tools and AI agents — same permissions as the cookie.
+- Tokens are per-user and singular: issuing a new one revokes the previous.
+
+---
+
+## Embedding Quillo in another app
+
+The router and dependencies are exported so a host app can mount Quillo and inject its own auth/DB:
+
+```python
+from quillo import paper_router, templates_router, get_current_user, get_db, Base
+
+app.include_router(paper_router)
+app.include_router(templates_router)
+app.dependency_overrides[get_current_user] = host_get_current_user  # -> (id, name, email, role)
+app.dependency_overrides[get_db] = host_get_db
+Base.metadata.create_all(bind=host_engine)   # creates paper_* tables in the host DB
+```
+
+> `papers_routes` queries `models.User` directly for collaborator/owner lookups, so full embedding requires reconciling the host's user table (or injecting a user lookup). See `.claude/CLAUDE.md` for the cutover notes.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. Please run the backend tests and a frontend build before submitting.
