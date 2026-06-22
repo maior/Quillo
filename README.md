@@ -6,6 +6,10 @@ Overleaf is great for writing papers with people, but it locks your manuscript i
 
 You bring your own model. Quillo just makes the paper reachable.
 
+![Quillo editor — file tree, LaTeX source, and live PDF preview side by side](docs/screenshots/editor.png)
+
+*The editor: file tree, LaTeX source with syntax highlighting, and a live `xelatex` PDF preview — the same project an agent edits over the API.*
+
 | Layer | Stack | Default port |
 |---|---|---|
 | Backend | FastAPI · SQLAlchemy 2.0 · SQLite | **8675** |
