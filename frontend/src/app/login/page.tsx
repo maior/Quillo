@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogIn, Loader2 } from "lucide-react";
 import { authApi } from "@/lib/api";
@@ -35,7 +36,9 @@ export default function LoginPage() {
         className="w-full max-w-sm space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
       >
         <div className="space-y-1 text-center">
-          <h1 className="font-display text-2xl font-bold text-slate-900">Quillo</h1>
+          <Link href="/" className="font-display text-2xl font-bold text-slate-900 hover:text-slate-700">
+            Quillo
+          </Link>
           <p className="text-sm text-slate-500">Collaborative LaTeX Paper Workspace</p>
         </div>
 
