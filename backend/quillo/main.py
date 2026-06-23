@@ -34,6 +34,10 @@ def _migrate(bind) -> None:
             conn.execute(text('ALTER TABLE paper ADD COLUMN "key" VARCHAR(16) NOT NULL DEFAULT \'\''))
         if cols and "owner_id" not in cols:
             conn.execute(text("ALTER TABLE paper ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0"))
+        # Self-registration adds a pending/active distinction; existing accounts default to active.
+        ucols = [row[1] for row in conn.execute(text('PRAGMA table_info("user")'))]
+        if ucols and "status" not in ucols:
+            conn.execute(text("ALTER TABLE \"user\" ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'active'"))
 
 
 def _backfill_paper_keys(db: Session) -> None:

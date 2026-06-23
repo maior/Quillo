@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Lock, Plus } from "lucide-react";
-import { authApi, authFetch } from "@/lib/api";
+import { FileText, Loader2, Lock, Plus, Users } from "lucide-react";
+import { authApi, authFetch, type AuthUser } from "@/lib/api";
 
 interface PaperMeta {
   id: number;
@@ -32,6 +32,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 export default function PapersPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [me, setMe] = useState<AuthUser | null>(null);
   const [papers, setPapers] = useState<PaperMeta[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -39,7 +40,10 @@ export default function PapersPage() {
   useEffect(() => {
     authApi
       .me()
-      .then(() => setReady(true))
+      .then((u) => {
+        setMe(u);
+        setReady(true);
+      })
       .catch(() => router.replace("/login"));
   }, [router]);
 
@@ -83,6 +87,14 @@ export default function PapersPage() {
             A space to manage your in-progress manuscripts together. Edit locks let one person
             write safely at a time.
           </p>
+          {me?.role === "admin" && (
+            <Link
+              href="/admin/users"
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10"
+            >
+              <Users size={15} /> Manage users
+            </Link>
+          )}
         </div>
       </section>
 

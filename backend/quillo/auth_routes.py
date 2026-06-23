@@ -21,6 +21,8 @@ from .security import (
     destroy_session,
     get_current_user,
     hash_api_token,
+    hash_password,
+    require_admin,
     verify_password,
 )
 
@@ -28,6 +30,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class RegisterIn(BaseModel):
+    name: str
     email: str
     password: str
 
@@ -56,6 +64,33 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)) -> m
         samesite="lax",
     )
     return user
+
+
+@router.post("/register", status_code=201)
+def register(body: RegisterIn, db: Session = Depends(get_db)) -> dict:
+    """Public self-registration. The account is created as `pending` and can log in
+    only after an administrator approves it."""
+    name = body.name.strip()
+    email = body.email.strip().lower()
+    if not name:
+        raise HTTPException(status_code=422, detail="Please enter your name")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="Please enter a valid email address")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+    if db.scalar(select(models.User).where(models.User.email == email)):
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    db.add(
+        models.User(
+            email=email,
+            password_hash=hash_password(body.password),
+            name=name,
+            role="member",
+            status="pending",
+        )
+    )
+    db.commit()
+    return {"status": "pending", "message": "Your account is awaiting administrator approval."}
 
 
 @router.post("/logout")
@@ -130,3 +165,49 @@ def revoke_api_token(
         db.delete(rec)
         db.commit()
     return {"revoked": rec is not None}
+
+
+# ── Admin: user management (approve registrations, remove accounts) ──────────
+@router.get("/admin/users", response_model=list[UserOut])
+def admin_list_users(
+    db: Session = Depends(get_db), admin: models.User = Depends(require_admin)
+) -> list[models.User]:
+    """Every user, pending accounts first — for the admin approval screen."""
+    users = list(db.scalars(select(models.User)))
+    users.sort(key=lambda u: (u.status != "pending", u.name.lower(), u.email))
+    return users
+
+
+@router.post("/admin/users/{user_id}/approve", response_model=UserOut)
+def admin_approve_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> models.User:
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No such user")
+    user.status = "active"
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.delete("/admin/users/{user_id}")
+def admin_remove_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(require_admin),
+) -> dict:
+    """Reject a pending registration or remove an existing member. Admins cannot be
+    removed and an admin cannot remove themselves."""
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No such user")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="You cannot remove your own account")
+    if user.role == "admin":
+        raise HTTPException(status_code=400, detail="Admin accounts cannot be removed here")
+    db.delete(user)
+    db.commit()
+    return {"removed": True}

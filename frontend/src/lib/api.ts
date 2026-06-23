@@ -7,6 +7,7 @@ export interface AuthUser {
   email: string;
   name: string;
   role: "admin" | "member";
+  status: "active" | "pending";
 }
 
 /** Authenticated request — includes the session cookie, client components only. */
@@ -35,6 +36,20 @@ export async function authFetch<T>(
 export const authApi = {
   login: (email: string, password: string) =>
     authFetch<AuthUser>("/api/auth/login", { method: "POST", json: { email, password } }),
+  register: (name: string, email: string, password: string) =>
+    authFetch<{ status: string; message: string }>("/api/auth/register", {
+      method: "POST",
+      json: { name, email, password },
+    }),
   logout: () => authFetch<{ status: string }>("/api/auth/logout", { method: "POST" }),
   me: () => authFetch<AuthUser>("/api/auth/me"),
+};
+
+/** Admin-only user management (approve registrations, remove accounts). */
+export const adminApi = {
+  listUsers: () => authFetch<AuthUser[]>("/api/auth/admin/users"),
+  approve: (id: number) =>
+    authFetch<AuthUser>(`/api/auth/admin/users/${id}/approve`, { method: "POST" }),
+  remove: (id: number) =>
+    authFetch<{ removed: boolean }>(`/api/auth/admin/users/${id}`, { method: "DELETE" }),
 };

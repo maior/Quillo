@@ -103,14 +103,27 @@ tail -f logs/backend.log logs/frontend.log   # follow both logs
 
 ---
 
+## Accounts & sign-up
+
+The first boot seeds **one admin** from `QUILLO_ADMIN_EMAIL` / `QUILLO_ADMIN_PASSWORD` (defaults `admin@quillo.local` / `change-me-quillo` — change them). Everyone else self-registers:
+
+1. A visitor opens **Sign up** (`/register`) and creates an account — it starts as **`pending`**.
+2. Pending accounts **cannot log in yet** (login returns `403`).
+3. An **admin approves** them under **Manage users** (`/admin/users`) → the account becomes `active` and can sign in. Admins can also reject a registration or remove a member.
+
+This keeps a self-hosted instance closed by default: anyone can ask for access, but only an admin lets them in. (Embedding Quillo in a host app bypasses all of this — the host's auth is used instead.)
+
+---
+
 ## Using the web UI
 
-1. Log in at http://localhost:8678 with your admin credentials.
+1. Log in at http://localhost:8678. New here? **Sign up** and wait for an admin to approve you.
 2. **New paper** → you get a project that starts from a `main.tex` skeleton.
 3. Edit `main.tex` (and add `sections/*.tex`, figures, `.bib`, etc.) in the LaTeX editor.
 4. Click **Compile** to render a PDF preview (requires `xelatex`).
-5. **Invite collaborators** by email; share **review comments** on any text selection.
+5. **Invite collaborators** by email (they must be approved members); share **review comments** on any text selection.
 6. Optionally **apply a template** (26 included) or **export** the whole project as a ZIP.
+7. **Admins** get a **Manage users** button in the workspace to approve sign-ups.
 
 ---
 
@@ -196,7 +209,8 @@ Full interactive docs at `/docs`. Highlights:
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /api/auth/login` · `POST /logout` · `GET /me` · `GET/POST/DELETE /api/auth/token` |
+| Auth | `POST /api/auth/login` · `POST /register` · `POST /logout` · `GET /me` · `GET/POST/DELETE /api/auth/token` |
+| Admin (users) | `GET /api/auth/admin/users` · `POST /admin/users/{id}/approve` · `DELETE /admin/users/{id}` |
 | Papers | `GET/POST /api/papers` · `GET/PUT/DELETE /api/papers/{key}` |
 | Locking | `POST /{key}/lock` · `POST /{key}/unlock` |
 | Files | `GET/POST /{key}/files` · `GET/PUT/DELETE /{key}/files/{id}` · `POST /{key}/files/upload` · `GET /{key}/export` |

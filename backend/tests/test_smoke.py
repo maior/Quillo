@@ -65,6 +65,61 @@ def test_templates_listed(client):
     assert all("key" in t and "name" in t for t in tpls)
 
 
+BOB = {"name": "Bob Researcher", "email": "bob@example.com", "password": "supersecret"}
+
+
+def test_register_creates_pending_and_blocks_login(client):
+    r = client.post("/api/auth/register", json=BOB)
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "pending"
+    # pending users cannot log in until approved
+    r = client.post("/api/auth/login", json={"email": BOB["email"], "password": BOB["password"]})
+    assert r.status_code == 403
+
+
+def test_register_rejects_duplicate_email(client):
+    assert client.post("/api/auth/register", json=BOB).status_code == 201
+    dup = {**BOB, "name": "Someone Else"}
+    assert client.post("/api/auth/register", json=dup).status_code == 409
+
+
+def test_register_rejects_short_password(client):
+    weak = {**BOB, "password": "short"}
+    assert client.post("/api/auth/register", json=weak).status_code == 422
+
+
+def test_admin_approve_enables_login(client):
+    client.post("/api/auth/register", json=BOB)
+    login(client)  # admin
+    users = client.get("/api/auth/admin/users").json()
+    bob = next(u for u in users if u["email"] == BOB["email"])
+    assert bob["status"] == "pending" and bob["role"] == "member"
+    assert client.post(f"/api/auth/admin/users/{bob['id']}/approve").status_code == 200
+    client.post("/api/auth/logout")
+    r = client.post("/api/auth/login", json={"email": BOB["email"], "password": BOB["password"]})
+    assert r.status_code == 200
+
+
+def test_admin_reject_removes_pending_user(client):
+    client.post("/api/auth/register", json=BOB)
+    login(client)
+    bob = next(u for u in client.get("/api/auth/admin/users").json() if u["email"] == BOB["email"])
+    assert client.delete(f"/api/auth/admin/users/{bob['id']}").status_code == 200
+    assert all(u["email"] != BOB["email"] for u in client.get("/api/auth/admin/users").json())
+
+
+def test_admin_user_management_requires_admin(client):
+    # approve Bob, then confirm a non-admin member is forbidden from the admin routes
+    client.post("/api/auth/register", json=BOB)
+    login(client)
+    bob = next(u for u in client.get("/api/auth/admin/users").json() if u["email"] == BOB["email"])
+    client.post(f"/api/auth/admin/users/{bob['id']}/approve")
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"email": BOB["email"], "password": BOB["password"]})
+    assert client.get("/api/auth/admin/users").status_code == 403
+    assert client.post(f"/api/auth/admin/users/{bob['id']}/approve").status_code == 403
+
+
 def test_api_token_bearer_access(client):
     login(client)
     tok = client.post("/api/auth/token").json()["token"]

@@ -60,12 +60,19 @@ export default function Landing() {
               <Loader2 size={15} className="animate-spin text-ink/40" />
             </span>
           ) : (
-            <Link
-              href={ctaHref}
-              className="rounded-full bg-ink px-4 py-2 font-medium text-white transition hover:bg-ink-700"
-            >
-              {authed ? "Workspace" : "Sign in"}
-            </Link>
+            <>
+              {!authed && (
+                <Link href="/register" className="text-ink/55 transition hover:text-ink">
+                  Sign up
+                </Link>
+              )}
+              <Link
+                href={ctaHref}
+                className="rounded-full bg-ink px-4 py-2 font-medium text-white transition hover:bg-ink-700"
+              >
+                {authed ? "Workspace" : "Sign in"}
+              </Link>
+            </>
           )}
         </nav>
       </header>
@@ -101,6 +108,14 @@ export default function Landing() {
                 >
                   {ctaLabel}
                   <ArrowRight size={16} className="transition group-hover:translate-x-0.5" />
+                </Link>
+              )}
+              {authed === false && (
+                <Link
+                  href="/register"
+                  className="text-sm font-medium text-ink/60 underline-offset-4 transition hover:text-ink hover:underline"
+                >
+                  Create an account
                 </Link>
               )}
               <a
