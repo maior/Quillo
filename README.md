@@ -37,6 +37,26 @@ You bring your own model. Quillo just makes the paper reachable.
 
 Requirements: **Python 3.11+**, **Node 18+**, and (for PDF compilation) a TeX distribution providing **`xelatex`** — e.g. TeX Live or MacTeX. `bibtex` is optional.
 
+### One-liner
+
+Clones into `./Quillo`, installs everything, and starts both services in the background:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maior/Quillo/main/install.sh | bash
+```
+
+When it finishes, open **http://localhost:8678** and sign in with `admin@quillo.local` / `change-me-quillo` (**change this** before exposing the server). Re-running the command updates an existing checkout and restarts. You can set the admin account and install location up front:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maior/Quillo/main/install.sh \
+  | QUILLO_ADMIN_EMAIL="you@example.com" QUILLO_ADMIN_PASSWORD="a-strong-password" \
+    QUILLO_DIR="$HOME/quillo" bash
+```
+
+> Prefer to read before you pipe to a shell? The script is [`install.sh`](install.sh) — review it first, or follow the manual steps below.
+
+### Manual
+
 ```bash
 git clone https://github.com/maior/Quillo.git
 cd Quillo
