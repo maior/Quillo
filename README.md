@@ -6,9 +6,9 @@ Overleaf is great for writing papers with people, but it locks your manuscript i
 
 You bring your own model. Quillo just makes the paper reachable.
 
-![Quillo landing page — hero with "bring your own LLM", feature cards, and a sign-in entry point](docs/screenshots/landing.png)
+![Quillo landing page — serif hero next to a terminal showing the real agent edit loop (token → lock → edit → compile → unlock)](docs/screenshots/landing.png)
 
-*The front door: a self-hosted workspace you sign in to. The same account works in the browser and as the API token your agent uses.*
+*The front door: sign in to your own instance. The terminal on the right is the actual API loop an agent runs — take the lock, edit a `.tex` file, compile, unlock — using the same account you log in with.*
 
 ![Quillo editor — file tree, LaTeX source, and live PDF preview side by side](docs/screenshots/editor.png)
 
