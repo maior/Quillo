@@ -405,6 +405,13 @@ PAPER_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "uploads", "papers"
 )
 _IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".eps"}
+# LaTeX sources become editable text files; everything else is a reference attachment
+# (kept with the paper and in the export ZIP, never passed to the compiler)
+_TEXT_EXT = {".tex", ".bib", ".sty", ".cls", ".bst", ".txt", ".md"}
+_ATTACH_EXT = {".pptx", ".ppt", ".docx", ".doc", ".xlsx", ".xls", ".csv", ".hwp", ".hwpx",
+               ".zip", ".json", ".opju", ".tif", ".tiff", ".svg", ".mp4"}
+_IMAGE_MAX = 20 * 1024 * 1024
+_ATTACH_MAX = 50 * 1024 * 1024
 _PATH_SEGMENT = re.compile(r"^[\w.\- ]+$")  # \w already matches Unicode letters (incl. CJK)
 
 MAIN_TEX_TEMPLATE = """\\documentclass{article}
@@ -601,14 +608,22 @@ async def upload_paper_file(
     _require_lock(paper, user)
     name = os.path.basename(file.filename or "file")
     ext = os.path.splitext(name)[1].lower()
-    if ext not in _IMAGE_EXT:
+    allowed = _IMAGE_EXT | _TEXT_EXT | _ATTACH_EXT
+    if ext not in allowed:
         raise HTTPException(
             status_code=422,
-            detail=f"Only image/figure files can be uploaded ({', '.join(sorted(_IMAGE_EXT))})",
+            detail=f"Allowed file types: {', '.join(sorted(allowed))}",
         )
-    data = await file.read()
-    if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=422, detail="Only files up to 20MB can be uploaded")
+    limit = _IMAGE_MAX if ext in _IMAGE_EXT else _ATTACH_MAX
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(status_code=422, detail=f"Only files up to {limit // 2**20}MB can be uploaded")
+    text = None
+    if ext in _TEXT_EXT:
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=422, detail=f"{name} is not UTF-8 text")
     logical = _normalize_path(f"{folder}/{name}" if folder else name)
     if db.scalar(
         select(models.PaperFile).where(
@@ -616,6 +631,12 @@ async def upload_paper_file(
         )
     ):
         raise HTTPException(status_code=409, detail="A file already exists at this path")
+
+    if text is not None:
+        f = models.PaperFile(paper_id=paper.id, path=logical, kind="text", content=text)
+        db.add(f)
+        db.commit()
+        return _file_out(f)
 
     store_dir = os.path.join(PAPER_UPLOAD_DIR, str(paper.id))
     os.makedirs(store_dir, exist_ok=True)
@@ -626,7 +647,7 @@ async def upload_paper_file(
     f = models.PaperFile(
         paper_id=paper.id,
         path=logical,
-        kind="image",
+        kind="image" if ext in _IMAGE_EXT else "attachment",
         storage=f"/uploads/papers/{paper.id}/{stored}",
     )
     db.add(f)
@@ -651,7 +672,7 @@ def export_zip(
         for f in files:
             if f.kind == "text":
                 zf.writestr(f.path, f.content)
-            elif f.kind == "image" and f.storage:
+            elif f.kind in ("image", "attachment") and f.storage:
                 disk = os.path.join(upload_root, f.storage.lstrip("/"))
                 if os.path.exists(disk):
                     zf.write(disk, f.path)
@@ -937,7 +958,7 @@ Auth: include the `Authorization: Bearer <token>` header on every request.
 ## Reading
 
 - `GET {base}` — paper metadata (title, status: draft|submitted|revision|published, journal, locked, lock_user_name)
-- `GET {base}/files` — file list [{{id, path, kind: text|image|folder}}]
+- `GET {base}/files` — file list [{{id, path, kind: text|image|attachment|folder}}] (attachment = reference material such as pptx/docx/xlsx: download via its `storage` URL, not compiled)
 - `GET {base}/files/{{file_id}}` — file content (content)
 - `GET {base}/export` — full project ZIP
 

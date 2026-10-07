@@ -115,6 +115,6 @@ class PaperFile(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     paper_id: Mapped[int] = mapped_column(Integer, index=True)
     path: Mapped[str] = mapped_column(String(512))  # logical path (e.g. sections/intro.tex)
-    kind: Mapped[str] = mapped_column(String(16), default="text")  # text | image | folder
+    kind: Mapped[str] = mapped_column(String(16), default="text")  # text | image | attachment | folder
     content: Mapped[str] = mapped_column(Text, default="")  # body of a text file
     storage: Mapped[str] = mapped_column(String(512), default="")  # actual image path (/uploads/...)
