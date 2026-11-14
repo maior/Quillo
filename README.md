@@ -28,6 +28,7 @@ You bring your own model. Quillo just makes the paper reachable.
 - **Bring-your-own-LLM.** No vendor AI lock-in. Any agent with a bearer token can drive the editor through a documented REST API. The agent can even fetch its own instructions: `GET /api/papers/{key}/guide` returns a Markdown playbook.
 - **Human + agent on the same document.** A 30-minute edit lock keeps a human and an agent from clobbering each other. Review comments don't need the lock, so an agent can leave suggestions while you keep typing.
 - **Real LaTeX, real PDFs.** Server-side `xelatex` (Unicode-native, CJK-friendly) with optional `bibtex`. Every compile auto-snapshots changed files into version history with line-level diffs.
+- **An editor that helps you write.** `\cite{` and `\ref{` autocomplete from your own `.bib` keys and `\label`s, auto-paired brackets, find & replace, a dark editing theme, and compile errors listed by file and line — click one to jump to it. Paste a DOI to add a BibTeX entry (only the DOI is sent to doi.org).
 - **Self-hosted & private.** SQLite + local file storage. Your manuscripts never leave your machine. Clone, run, done.
 - **Batteries included.** 26 LaTeX templates, image uploads, project ZIP export, collaborator invites, and draft → submitted → revision → published status tracking.
 

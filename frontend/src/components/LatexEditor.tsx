@@ -1,6 +1,7 @@
 "use client";
 
-import { RefObject, useMemo, useRef, useState } from "react";
+import { RefObject, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 
 /**
  * LaTeX syntax-highlighting editor — overlay approach.
@@ -12,6 +13,9 @@ import { RefObject, useMemo, useRef, useState } from "react";
  *
  * Extra features:
  * - marks: highlights commented ranges
+ * - \cite{ · \ref{ autocomplete: the manuscript's citation keys (.bib) and labels (\label)
+ * - auto-pairing brackets ({} [] () $$), Tab indentation, Ctrl+/ comment toggle
+ * - find & replace (Ctrl+F · Ctrl+H)
  * - backslash (\) autocomplete: typing \ shows command candidates, select with ↑↓ + Enter
  */
 
@@ -26,6 +30,16 @@ const TOKEN_CLS: Record<TokenKind, string> = {
   brace: "text-amber-600",
   special: "text-rose-600",
   env: "font-semibold text-emerald-600",
+  plain: "",
+};
+// for the dark editing theme — the same 5 families in lighter tones
+const TOKEN_CLS_DARK: Record<TokenKind, string> = {
+  command: "text-sky-300",
+  comment: "italic text-slate-500",
+  math: "text-fuchsia-300",
+  brace: "text-amber-300",
+  special: "text-rose-300",
+  env: "font-semibold text-emerald-300",
   plain: "",
 };
 
@@ -77,7 +91,8 @@ export function tokenizeLatex(src: string): Token[] {
 // define typography in one place so the textarea and layer overlap pixel-for-pixel
 const TYPO = "p-5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words";
 
-export function LatexHighlight({ value, className = "" }: { value: string; className?: string }) {
+export function LatexHighlight({ value, className = "", dark = false }: { value: string; className?: string; dark?: boolean }) {
+  const cls = dark ? TOKEN_CLS_DARK : TOKEN_CLS;
   const tokens = useMemo(() => tokenizeLatex(value), [value]);
   return (
     <>
@@ -85,7 +100,7 @@ export function LatexHighlight({ value, className = "" }: { value: string; class
         t.kind === "plain" ? (
           t.text
         ) : (
-          <span key={i} className={TOKEN_CLS[t.kind] + className}>
+          <span key={i} className={cls[t.kind] + className}>
             {t.text}
           </span>
         ),
@@ -98,7 +113,7 @@ export function LatexHighlight({ value, className = "" }: { value: string; class
 // ── comment mark layer — text is transparent, only the range background is highlighted ──
 export type Mark = { start: number; end: number };
 
-function MarkLayer({ value, marks }: { value: string; marks: Mark[] }) {
+function MarkLayer({ value, marks, cls = "bg-amber-300/40", testid = "comment-mark" }: { value: string; marks: Mark[]; cls?: string; testid?: string }) {
   const sorted = [...marks]
     .filter((m) => m.end > m.start)
     .sort((a, b) => a.start - b.start);
@@ -109,7 +124,7 @@ function MarkLayer({ value, marks }: { value: string; marks: Mark[] }) {
     const e = Math.max(s, Math.min(m.end, value.length));
     if (s > pos) out.push(value.slice(pos, s));
     out.push(
-      <span key={i} data-testid="comment-mark" className="rounded-[3px] bg-amber-300/40 box-decoration-clone">
+      <span key={i} data-testid={testid} className={`rounded-[3px] ${cls} box-decoration-clone`}>
         {value.slice(s, e)}
       </span>,
     );
@@ -227,11 +242,39 @@ function caretCoords(ta: HTMLTextAreaElement, pos: number): { top: number; left:
   return coords;
 }
 
+/** Scroll so pos is visible and select [start,end) — used to jump to an error line or a find result. */
+export function revealInTextarea(ta: HTMLTextAreaElement, start: number, end = start, focus = true) {
+  const lineH = parseFloat(getComputedStyle(ta).lineHeight) || 21;
+  const abs = caretCoords(ta, start).top + ta.scrollTop - lineH - 4; // y relative to the top of the text
+  if (abs < ta.scrollTop + lineH || abs > ta.scrollTop + ta.clientHeight - lineH * 2) {
+    ta.scrollTop = Math.max(0, abs - ta.clientHeight / 3);
+  }
+  if (focus) ta.focus();
+  ta.setSelectionRange(start, end);
+}
+
+/** [start, end) offsets of the n-th line (1-based) */
+export function lineRange(text: string, line: number): [number, number] {
+  let start = 0;
+  for (let i = 1; i < line; i++) {
+    const nl = text.indexOf("\n", start);
+    if (nl < 0) break;
+    start = nl + 1;
+  }
+  const nl = text.indexOf("\n", start);
+  return [start, nl < 0 ? text.length : nl];
+}
+
+export type Suggest = { key: string; hint?: string };
+const PAIRS: Record<string, string> = { "{": "}", "[": "]", "(": ")", $: "$" };
+const CLOSERS = new Set(Object.values(PAIRS));
+
 type Menu = {
   open: boolean;
   items: Command[];
   sel: number;
-  start: number; // index of the '\'
+  start: number; // start of the range to replace (index of the '\' or of the key prefix)
+  mode?: "cmd" | "key"; // key = a key inside \cite·\ref — inserted as is, caret moves past the brace
   top: number;
   left: number;
 };
@@ -244,16 +287,97 @@ export default function LatexEditor({
   textareaRef,
   marks = [],
   onSelectionChange,
+  cites = [],
+  labels = [],
+  dark = false,
 }: {
   value: string;
   onChange: (next: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   marks?: Mark[];
   onSelectionChange?: (start: number, end: number) => void;
+  /** citation keys (.bib) suggested inside \cite{ */
+  cites?: Suggest[];
+  /** labels (\label) suggested inside \ref{ */
+  labels?: Suggest[];
+  /** dark editing theme */
+  dark?: boolean;
 }) {
   const backRef = useRef<HTMLDivElement>(null);
   const markRef = useRef<HTMLDivElement>(null);
+  const findRef = useRef<HTMLDivElement>(null);
+  const findInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<Menu>(MENU_CLOSED);
+  const [find, setFind] = useState<{ open: boolean; replace: boolean; q: string; r: string; idx: number }>({ open: false, replace: false, q: "", r: "", idx: 0 });
+
+  // selection to restore after a value change — applied right before the next paint (so the caret never jumps to the end while typing fast).
+  const pendingSel = useRef<[number, number] | null>(null);
+  const refreshRef = useRef<(val: string, caret: number) => void>(() => {});
+  const skipRefresh = useRef(false); // do not reopen the menu right after a candidate was picked
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    if (ta && pendingSel.current) {
+      const [a, b] = pendingSel.current;
+      pendingSel.current = null;
+      ta.setSelectionRange(a, b);
+      if (a === b && !skipRefresh.current) refreshRef.current(ta.value, a); // show candidates right after a pair is created too
+      skipRefresh.current = false;
+    }
+  }, [value, textareaRef]);
+  const edit = (next: string, selStart: number, selEnd = selStart) => {
+    if (next === value) {
+      // same value, only the caret moves (skipping a closing bracket) — no re-render happens, so set it directly
+      textareaRef.current?.setSelectionRange(selStart, selEnd);
+      refreshRef.current(value, selStart);
+      return;
+    }
+    pendingSel.current = [selStart, selEnd];
+    onChange(next);
+  };
+
+  // find results (case-insensitive)
+  const hits = useMemo(() => {
+    const q = find.q.toLowerCase();
+    if (!find.open || !q) return [] as Mark[];
+    const hay = value.toLowerCase();
+    const out: Mark[] = [];
+    for (let i = hay.indexOf(q); i >= 0 && out.length < 2000; i = hay.indexOf(q, i + q.length)) out.push({ start: i, end: i + q.length });
+    return out;
+  }, [find.open, find.q, value]);
+  const cur = hits.length ? ((find.idx % hits.length) + hits.length) % hits.length : -1;
+  const gotoHit = (i: number) => {
+    if (!hits.length) return;
+    const n = ((i % hits.length) + hits.length) % hits.length;
+    setFind((f) => ({ ...f, idx: n }));
+    const ta = textareaRef.current;
+    if (ta) revealInTextarea(ta, hits[n].start, hits[n].end, false);
+  };
+  const openFind = (replace: boolean) => {
+    const ta = textareaRef.current;
+    const sel = ta && ta.selectionEnd > ta.selectionStart ? value.slice(ta.selectionStart, ta.selectionEnd) : "";
+    setFind((f) => ({ ...f, open: true, replace: replace || f.replace, q: sel && !sel.includes("\n") ? sel : f.q, idx: 0 }));
+    requestAnimationFrame(() => findInput.current?.select());
+  };
+  const closeFind = () => {
+    setFind((f) => ({ ...f, open: false }));
+    textareaRef.current?.focus();
+  };
+  const replaceOne = () => {
+    if (cur < 0) return;
+    const h = hits[cur];
+    edit(value.slice(0, h.start) + find.r + value.slice(h.end), h.start + find.r.length);
+  };
+  const replaceAll = () => {
+    if (!hits.length) return;
+    let out = "";
+    let pos = 0;
+    for (const h of hits) {
+      out += value.slice(pos, h.start) + find.r;
+      pos = h.end;
+    }
+    skipRefresh.current = true;
+    edit(out + value.slice(pos), 0);
+  };
 
   const syncScroll = () => {
     const ta = textareaRef.current;
@@ -263,11 +387,21 @@ export default function LatexEditor({
         layer.scrollLeft = ta.scrollLeft;
       }
     }
+    if (ta && findRef.current) {
+      findRef.current.scrollTop = ta.scrollTop;
+      findRef.current.scrollLeft = ta.scrollLeft;
+    }
   };
 
   // find the "\prefix" right before the caret — do not open after "\\" (the line-break command)
-  const detectMenu = (val: string, caret: number) => {
-    const upto = val.slice(Math.max(0, caret - 30), caret);
+  const detectMenu = (val: string, caret: number): { prefix: string; start: number; keys?: Suggest[] } | null => {
+    const upto = val.slice(Math.max(0, caret - 160), caret);
+    // \cite{a,b|  ·  \ref{fig:|  — inside the braces, the prefix is what follows the last comma
+    const k = /\\(cite[a-zA-Z]*|[a-zA-Z]*ref)\*?(?:\[[^\]]*\])*\{([^{}]*)$/.exec(upto);
+    if (k) {
+      const prefix = k[2].slice(k[2].lastIndexOf(",") + 1).replace(/^\s+/, "");
+      return { prefix, start: caret - prefix.length, keys: k[1].startsWith("cite") ? cites : labels };
+    }
     const m = /\\([a-zA-Z]*)$/.exec(upto);
     if (!m) return null;
     const start = caret - m[1].length - 1;
@@ -282,6 +416,19 @@ export default function LatexEditor({
       return;
     }
     const q = hit.prefix.toLowerCase();
+    if (hit.keys) {
+      const pool = hit.keys.filter((x) => x.key.toLowerCase().includes(q) || (x.hint ?? "").toLowerCase().includes(q));
+      pool.sort((a, b) => Number(b.key.toLowerCase().startsWith(q)) - Number(a.key.toLowerCase().startsWith(q)));
+      const keyItems = pool.slice(0, 9).map((x) => ({ insert: x.key, label: x.hint ?? "" }));
+      if (keyItems.length === 0) {
+        if (menu.open) setMenu(MENU_CLOSED);
+        return;
+      }
+      const el = textareaRef.current;
+      const at = el ? caretCoords(el, hit.start) : { top: 0, left: 0 };
+      setMenu({ open: true, items: keyItems, sel: 0, start: hit.start, mode: "key", ...at });
+      return;
+    }
     const starts = COMMANDS.filter((c) => c.insert.slice(1).toLowerCase().startsWith(q));
     const contains = COMMANDS.filter(
       (c) => !starts.includes(c) && c.insert.slice(1).toLowerCase().includes(q),
@@ -296,22 +443,97 @@ export default function LatexEditor({
     setMenu({ open: true, items, sel: 0, start: hit.start, ...pos });
   };
 
+  refreshRef.current = refreshMenu;
+
   const applyCommand = (cmd: Command) => {
     const ta = textareaRef.current;
     if (!ta) return;
     const caret = ta.selectionStart ?? value.length;
-    const next = value.slice(0, menu.start) + cmd.insert + value.slice(caret);
-    onChange(next);
+    const isKey = menu.mode === "key";
+    // when inserting a key, add the closing brace if missing and move the caret past it
+    const hasClose = value[caret] === "}";
+    const close = isKey && !hasClose && value[caret] !== "," ? "}" : "";
+    const next = value.slice(0, menu.start) + cmd.insert + close + value.slice(caret);
+    const pos = menu.start + (isKey ? cmd.insert.length + (close || hasClose ? 1 : 0) : caretInInsert(cmd.insert));
     setMenu(MENU_CLOSED);
-    const pos = menu.start + caretInInsert(cmd.insert);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(pos, pos);
-    });
+    ta.focus();
+    pendingSel.current = [pos, pos];
+    skipRefresh.current = true;
+    onChange(next);
+  };
+
+  // [start, end) of the selected lines — used for indentation and comment toggling
+  const lineBlock = (s: number, e: number): [number, number] => {
+    const a = value.lastIndexOf("\n", s - 1) + 1;
+    const nl = value.indexOf("\n", e > s && value[e - 1] === "\n" ? e - 1 : e);
+    return [a, nl < 0 ? value.length : nl];
+  };
+
+  /** Editing shortcuts. Returns true when handled. */
+  const editKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    const ta = e.currentTarget;
+    const s = ta.selectionStart;
+    const en = ta.selectionEnd;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && (e.key === "f" || e.key === "h")) {
+      openFind(e.key === "h");
+      return true;
+    }
+    if (mod && e.key === "/") {
+      const [a, b] = lineBlock(s, en);
+      const lines = value.slice(a, b).split("\n");
+      const all = lines.every((l) => /^\s*%/.test(l) || l.trim() === "");
+      const out = lines.map((l) => (all ? l.replace(/^(\s*)% ?/, "$1") : l.trim() === "" ? l : l.replace(/^(\s*)/, "$1% "))).join("\n");
+      edit(value.slice(0, a) + out + value.slice(b), a, a + out.length);
+      return true;
+    }
+    if (e.key === "Tab" && !mod && !e.altKey) {
+      if (s === en && !e.shiftKey) {
+        edit(value.slice(0, s) + "  " + value.slice(en), s + 2);
+        return true;
+      }
+      const [a, b] = lineBlock(s, en);
+      const out = value.slice(a, b).split("\n").map((l) => (e.shiftKey ? l.replace(/^ {1,2}/, "") : "  " + l)).join("\n");
+      edit(value.slice(0, a) + out + value.slice(b), a, a + out.length);
+      return true;
+    }
+    if (mod || e.altKey || e.nativeEvent.isComposing) return false;
+    const next = value[en] ?? "";
+    if (e.key in PAIRS) {
+      const close = PAIRS[e.key];
+      if (s !== en) {
+        // wrap the selection
+        edit(value.slice(0, s) + e.key + value.slice(s, en) + close + value.slice(en), s + 1, en + 1);
+        return true;
+      }
+      if (e.key === "$" && next === "$") {
+        edit(value, s + 1); // skip over the closing $ that is already there
+        return true;
+      }
+      if (value[s - 1] === "\\") return false; // escapes such as \{ \$ are not paired
+      if (next === "" || /\s/.test(next) || CLOSERS.has(next)) {
+        edit(value.slice(0, s) + e.key + close + value.slice(en), s + 1);
+        return true;
+      }
+      return false;
+    }
+    if (CLOSERS.has(e.key) && s === en && next === e.key) {
+      edit(value, s + 1); // typing the closing bracket again skips over it
+      return true;
+    }
+    if (e.key === "Backspace" && s === en && s > 0 && PAIRS[value[s - 1]] === next && next !== "") {
+      edit(value.slice(0, s - 1) + value.slice(s + 1), s - 1); // delete an empty pair in one go
+      return true;
+    }
+    return false;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!menu.open) return;
+    const nav = ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(e.key);
+    if (!menu.open || !nav) {
+      if (editKey(e)) e.preventDefault(); // editing shortcuts (bracket pairs etc.) — the menu is recomputed after edit()
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const d = e.key === "ArrowDown" ? 1 : -1;
@@ -337,7 +559,7 @@ export default function LatexEditor({
   };
 
   return (
-    <div className="relative min-h-0 flex-1 bg-white">
+    <div data-editor-theme={dark ? "dark" : "light"} className={`relative min-h-0 flex-1 ${dark ? "bg-[#0F1115]" : "bg-white"}`}>
       {marks.length > 0 && (
         <div
           ref={markRef}
@@ -347,13 +569,18 @@ export default function LatexEditor({
           <MarkLayer value={value} marks={marks} />
         </div>
       )}
+      {hits.length > 0 && (
+        <div ref={findRef} aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden text-transparent ${TYPO}`}>
+          <MarkLayer value={value} marks={hits} cls="bg-sky-300/45" testid="find-hit" />
+        </div>
+      )}
       <div
         ref={backRef}
         aria-hidden
         data-testid="latex-highlight"
-        className={`pointer-events-none absolute inset-0 overflow-hidden text-ink ${TYPO}`}
+        className={`pointer-events-none absolute inset-0 overflow-hidden ${dark ? "text-slate-200" : "text-ink"} ${TYPO}`}
       >
-        <LatexHighlight value={value} />
+        <LatexHighlight value={value} dark={dark} />
       </div>
       <textarea
         ref={textareaRef}
@@ -367,9 +594,57 @@ export default function LatexEditor({
         onSelect={handleSelect}
         onBlur={() => setTimeout(() => setMenu(MENU_CLOSED), 150)}
         spellCheck={false}
-        style={{ WebkitTextFillColor: "transparent", color: "transparent", caretColor: "#10131a" }}
-        className={`absolute inset-0 block h-full w-full resize-none bg-transparent outline-none selection:bg-accent/20 ${TYPO}`}
+        style={{ WebkitTextFillColor: "transparent", color: "transparent", caretColor: dark ? "#F1F1EF" : "#10131a" }}
+        className={`absolute inset-0 block h-full w-full resize-none bg-transparent outline-none ${dark ? "selection:bg-sky-400/30" : "selection:bg-accent/20"} ${TYPO}`}
       />
+      {/* find · replace */}
+      {find.open && (
+        <div data-testid="find-panel" className="absolute right-3 top-2 z-20 w-[min(92%,340px)] rounded-xl bg-white p-2 text-xs shadow-2xl ring-1 ring-black/10">
+          <div className="flex items-center gap-1">
+            <input
+              ref={findInput}
+              value={find.q}
+              onChange={(e) => setFind((f) => ({ ...f, q: e.target.value, idx: 0 }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  gotoHit(cur + (e.shiftKey ? -1 : 1));
+                } else if (e.key === "Escape") closeFind();
+              }}
+              placeholder="Find"
+              aria-label="Find"
+              className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1.5 font-mono outline-none focus:border-accent"
+            />
+            <span data-testid="find-count" className="w-14 shrink-0 text-center tabular-nums text-ink/50">
+              {find.q ? (hits.length ? `${cur + 1}/${hits.length}` : "No results") : ""}
+            </span>
+            <button type="button" aria-label="Previous result" onClick={() => gotoHit(cur - 1)} className="grid h-7 w-7 place-items-center rounded-md text-ink/50 hover:bg-black/5"><ChevronUp size={14} /></button>
+            <button type="button" aria-label="Next result" onClick={() => gotoHit(cur + 1)} className="grid h-7 w-7 place-items-center rounded-md text-ink/50 hover:bg-black/5"><ChevronDown size={14} /></button>
+            <button type="button" aria-label="Close find" onClick={closeFind} className="grid h-7 w-7 place-items-center rounded-md text-ink/50 hover:bg-black/5"><X size={14} /></button>
+          </div>
+          {find.replace ? (
+            <div className="mt-1.5 flex items-center gap-1">
+              <input
+                value={find.r}
+                onChange={(e) => setFind((f) => ({ ...f, r: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    replaceOne();
+                  } else if (e.key === "Escape") closeFind();
+                }}
+                placeholder="Replace with"
+                aria-label="Replace with"
+                className="min-w-0 flex-1 rounded-md border border-black/10 px-2 py-1.5 font-mono outline-none focus:border-accent"
+              />
+              <button type="button" onClick={replaceOne} disabled={cur < 0} className="rounded-md px-2 py-1.5 font-medium text-ink/70 hover:bg-black/5 disabled:opacity-40">Replace</button>
+              <button type="button" onClick={replaceAll} disabled={!hits.length} className="rounded-md px-2 py-1.5 font-medium text-ink/70 hover:bg-black/5 disabled:opacity-40">All</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setFind((f) => ({ ...f, replace: true }))} className="mt-1 px-1 text-[11px] text-ink/45 hover:text-accent">Open replace (Ctrl+H)</button>
+          )}
+        </div>
+      )}
       {/* command autocomplete menu */}
       {menu.open && (
         <div
@@ -390,11 +665,11 @@ export default function LatexEditor({
                 i === menu.sel ? "bg-accent/10" : ""
               }`}
             >
-              <span className="font-mono text-xs text-blue-600">
+              <span className={`font-mono text-xs ${menu.mode === "key" ? "text-emerald-600" : "text-blue-600"}`}>
                 {c.insert.split("\n")[0]}
                 {c.insert.includes("\n") ? " …" : ""}
               </span>
-              <span className="ml-auto shrink-0 text-[11px] text-ink/45">{c.label}</span>
+              <span className={`ml-auto text-[11px] text-ink/45 ${menu.mode === "key" ? "min-w-0 truncate" : "shrink-0"}`}>{c.label}</span>
             </button>
           ))}
           <p className="border-t border-black/5 px-3.5 py-1.5 text-[10px] text-ink/35">

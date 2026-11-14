@@ -393,6 +393,7 @@ def remove_collaborator(
 # ─────────────────────────────────────────────────────────
 
 import io
+import json
 import os
 import re
 import secrets
@@ -1034,6 +1035,96 @@ _TEX_ENGINE = _find_tex_engine()
 _BIBTEX_ENGINE = _find_bibtex()
 
 
+# ── Parsing compile errors ──
+_TEX_ERR_START = re.compile(r"^(?:!|(?:\./)?[^\s:()]+\.\w+:\d+:)", re.M)
+_TEX_ERR_LINE = re.compile(r"^(?:\./)?([^\s:()]+\.(?:tex|bib|sty|cls|bbl)):(\d+): (.+)$", re.M)
+
+
+def parse_tex_errors(log: str, preview_entry: str | None = None) -> list[dict]:
+    """Extract [{file, line, message}] from a -file-line-error log (deduplicated per line, up to 10)."""
+    out: list[dict] = []
+    seen: set[tuple[str, int]] = set()
+    for m in _TEX_ERR_LINE.finditer(log):
+        path, line, msg = m.group(1), int(m.group(2)), m.group(3).strip()
+        if path == "__preview__.tex":  # wrapper used for section previews — not a user file
+            if preview_entry is None:
+                continue
+            path, line = preview_entry, 1
+        if (path, line) in seen:
+            continue
+        seen.add((path, line))
+        out.append({"file": path, "line": line, "message": msg[:200]})
+        if len(out) >= 10:
+            break
+    return out
+
+
+# ── Symbols for autocomplete: citation keys (.bib) and labels (\\label) ──
+_BIB_KEY = re.compile(r"@(?!comment|string|preamble)\w+\s*\{\s*([^,\s{}]+)\s*,", re.I)
+_BIB_TITLE = re.compile(r"\btitle\s*=\s*[{\"]+(.+?)[}\"]+\s*,?\s*$", re.I | re.M)
+_LABEL = re.compile(r"\\label\{([^}\s]+)\}")
+
+
+@router.get("/{paper_ref}/symbols")
+def paper_symbols(
+    paper_ref: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+) -> dict:
+    """Lists used by \\cite · \\ref autocomplete — collected from every text file."""
+    paper = _get_paper_or_404(db, paper_ref, user)
+    files = db.scalars(
+        select(models.PaperFile).where(
+            models.PaperFile.paper_id == paper.id, models.PaperFile.kind == "text"
+        )
+    )
+    cites: list[dict] = []
+    labels: list[dict] = []
+    for f in files:
+        if f.path.endswith(".bib"):
+            keys = list(_BIB_KEY.finditer(f.content))
+            for i, m in enumerate(keys):
+                end = keys[i + 1].start() if i + 1 < len(keys) else len(f.content)
+                t = _BIB_TITLE.search(f.content, m.end(), end)
+                cites.append({"key": m.group(1), "title": (t.group(1) if t else "")[:120]})
+        elif f.path.endswith(".tex"):
+            labels.extend({"key": m.group(1), "file": f.path} for m in _LABEL.finditer(f.content))
+    return {"cites": cites, "labels": labels}
+
+
+# ── DOI → BibTeX (only the DOI is sent to doi.org) ──
+_DOI = re.compile(r"10\.\d{4,9}/[^\s\"<>]+")
+
+
+@router.get("/bibtex/doi")
+def bibtex_from_doi(doi: str, user: models.User = Depends(get_current_user)) -> dict:
+    """Fetch one BibTeX entry by DOI (or a doi.org URL)."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    m = _DOI.search(doi.strip())
+    if not m:
+        raise HTTPException(status_code=400, detail="Not a valid DOI. Example: 10.1016/j.matchar.2024.114289")
+    clean = m.group(0).rstrip(".,;)")
+    req = urllib.request.Request(
+        "https://doi.org/" + urllib.parse.quote(clean, safe="/"),
+        headers={"Accept": "application/x-bibtex; charset=utf-8", "User-Agent": "paper-workspace"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:  # noqa: S310 — fixed host (doi.org)
+            text = res.read(200_000).decode("utf-8", errors="replace").strip()
+    except urllib.error.HTTPError as e:
+        code = 404 if e.code == 404 else 502
+        raise HTTPException(status_code=code, detail="No citation data found for this DOI.") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise HTTPException(status_code=502, detail="Could not reach doi.org. Please try again shortly.") from e
+    km = _BIB_KEY.search(text)
+    if not text.startswith("@") or not km:
+        raise HTTPException(status_code=502, detail="Could not read the citation data.")
+    return {"doi": clean, "key": km.group(1), "bibtex": text}
+
+
 @router.post("/{paper_ref}/compile")
 def compile_paper(
     paper_ref: str,
@@ -1106,6 +1197,7 @@ def compile_paper(
             _TEX_ENGINE,
             "-interaction=nonstopmode",
             "-halt-on-error",
+            "-file-line-error",  # report errors as "file:line: message" — the UI jumps to that line
             "-no-shell-escape",
             target,
         ]
@@ -1120,9 +1212,14 @@ def compile_paper(
                 raise HTTPException(status_code=422, detail="Compilation exceeded 60 seconds")
             out = proc.stdout[-4000:]
             if proc.returncode != 0:
-                idx = out.find("\n!")  # '!' is the LaTeX error marker
-                detail = out[idx:][:2000] if idx >= 0 else out[-2000:]
-                raise HTTPException(status_code=422, detail=detail.strip())
+                errors = parse_tex_errors(proc.stdout, entry if wrapper is not None else None)
+                m = _TEX_ERR_START.search(out)  # show from the first error ("!" or "file:line:")
+                detail = out[m.start():][:2000] if m else out[-2000:]
+                raise HTTPException(
+                    status_code=422,
+                    detail=detail.strip(),
+                    headers={"X-Compile-Errors": json.dumps(errors)},  # escaped to ASCII
+                )
             return out
 
         # 1) first pass generates .aux

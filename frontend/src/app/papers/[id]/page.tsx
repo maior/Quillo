@@ -33,7 +33,8 @@ import {
 import { authApi, authFetch } from "@/lib/api";
 import PdfViewer from "@/components/PdfViewer";
 import LatexToolbar from "@/components/LatexToolbar";
-import LatexEditor, { LatexHighlight } from "@/components/LatexEditor";
+import LatexEditor, { LatexHighlight, lineRange, revealInTextarea } from "@/components/LatexEditor";
+import BibHelper from "@/components/BibHelper";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8675";
 
@@ -50,6 +51,13 @@ interface Paper {
   lock_user_name: string;
   locked: boolean;
   lock_mine: boolean;
+}
+
+/** One compile error — extracted from the log by the server */
+interface TexError {
+  file: string;
+  line: number;
+  message: string;
 }
 
 interface PFile {
@@ -149,7 +157,28 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
-  const [preview, setPreview] = useState<{ url?: string; bytes?: ArrayBuffer; error?: string } | null>(null);
+  const [preview, setPreview] = useState<{ url?: string; bytes?: ArrayBuffer; error?: string; errors?: TexError[] } | null>(null);
+  // \cite · \ref autocomplete candidates (citation keys and labels collected from all files)
+  const [symbols, setSymbols] = useState<{ cites: { key: string; title: string }[]; labels: { key: string; file: string }[] }>({ cites: [], labels: [] });
+  const [bibOpen, setBibOpen] = useState(false);
+  // dark theme for the editing area — remembered in this browser
+  const [editorDark, setEditorDark] = useState(false);
+  useEffect(() => {
+    try {
+      setEditorDark(localStorage.getItem("paper-editor-dark") === "1");
+    } catch {
+      /* light theme when storage is unavailable */
+    }
+  }, []);
+  const toggleEditorDark = () =>
+    setEditorDark((d) => {
+      try {
+        localStorage.setItem("paper-editor-dark", d ? "0" : "1");
+      } catch {
+        /* it just won't be remembered */
+      }
+      return !d;
+    });
   const [me, setMe] = useState<{ id: number; name: string; email: string; role: string } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -490,6 +519,14 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
   const active = files.find((f) => f.id === activeId) ?? null;
   const editable = paper?.lock_mine ?? false;
 
+  const loadSymbols = useCallback(async () => {
+    try {
+      setSymbols(await authFetch(`/api/papers/${id}/symbols`));
+    } catch {
+      /* editing still works without autocomplete candidates */
+    }
+  }, [id]);
+
   const loadAll = useCallback(async () => {
     const [p, fs] = await Promise.all([
       authFetch<Paper>(`/api/papers/${id}`),
@@ -498,7 +535,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
     setPaper(p);
     setFiles(fs);
     setMeta({ title: p.title, status: p.status, journal: p.journal });
+    void loadSymbols();
     return fs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const didAutoCompile = useRef(false);
@@ -555,12 +594,13 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
           json: { content },
         });
         setDirty(false);
+        void loadSymbols(); // pick up new \label · citation keys for autocomplete
         if (!quiet) flash("Saved.");
       } catch (e) {
         flash(e instanceof Error ? e.message : "Failed to save.");
       }
     },
-    [active, content, id],
+    [active, content, id, loadSymbols],
   );
 
   // Auto-release the lock on leaving the screen — so someone who left doesn't block other members for the 30-minute TTL.
@@ -695,6 +735,27 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
     await loadAll();
   };
 
+  // open the file with the error and select that line
+  const jumpToError = async (er: TexError) => {
+    const f = files.find((x) => x.kind === "text" && x.path === er.file);
+    if (!f) return;
+    let text = content;
+    if (activeId !== f.id) {
+      if (editable && dirty) await saveFile(true);
+      const detail = await authFetch<{ content: string }>(`/api/papers/${id}/files/${f.id}`);
+      setActiveId(f.id);
+      setDirty(false);
+      setContent(detail.content);
+      text = detail.content;
+    }
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const [a, b] = lineRange(text, er.line);
+      revealInTextarea(ta, a, b);
+    }, 80);
+  };
+
   const [compiledEntry, setCompiledEntry] = useState("main.tex");
 
   const compile = async () => {
@@ -714,7 +775,13 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
       setCompiledEntry(entry);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setPreview({ error: d.detail ?? "Failed to compile." });
+        let errors: TexError[] = [];
+        try {
+          errors = JSON.parse(res.headers.get("X-Compile-Errors") ?? "[]");
+        } catch {
+          /* show only the log, without line info */
+        }
+        setPreview({ error: d.detail ?? "Failed to compile.", errors });
         return;
       }
       const bytes = await res.arrayBuffer();
@@ -1582,15 +1649,37 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between border-b border-black/5 px-5 py-2">
-                <span className="font-mono text-xs text-ink/50">{active.path}</span>
-                {editable && (
-                  <span className={`text-[11px] font-medium ${dirty ? "text-accent" : "text-ink/35"}`}>
-                    {dirty ? "● Modified" : "Saved"}
-                  </span>
-                )}
+              <div className={`flex items-center justify-between border-b px-5 py-2 ${editorDark ? "border-white/10 bg-[#0F1115]" : "border-black/5"}`}>
+                <span className={`font-mono text-xs ${editorDark ? "text-slate-400" : "text-ink/50"}`}>{active.path}</span>
+                <span className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    data-testid="editor-theme"
+                    onClick={toggleEditorDark}
+                    aria-pressed={editorDark}
+                    title="Dark theme for the editing area"
+                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${editorDark ? "border-white/15 text-slate-300 hover:text-white" : "border-black/10 text-ink/55 hover:text-ink"}`}
+                  >
+                    {editorDark ? "Light" : "Dark"}
+                  </button>
+                  {editable && active.path.endsWith(".bib") && (
+                    <button
+                      type="button"
+                      data-testid="bib-add"
+                      onClick={() => setBibOpen(true)}
+                      className="rounded-lg border border-black/10 px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:border-accent/40"
+                    >
+                      + Add reference
+                    </button>
+                  )}
+                  {editable && (
+                    <span className={`text-[11px] font-medium ${dirty ? "text-accent" : "text-ink/35"}`}>
+                      {dirty ? "● Modified" : "Saved"}
+                    </span>
+                  )}
+                </span>
               </div>
-              {editable && <LatexToolbar onInsert={insertSnippet} />}
+              {editable && <LatexToolbar onInsert={insertSnippet} dark={editorDark} />}
               {editable ? (
                 <LatexEditor
                   value={content}
@@ -1599,6 +1688,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                     setDirty(true);
                   }}
                   textareaRef={textareaRef}
+                  dark={editorDark}
+                  cites={symbols.cites.map((c) => ({ key: c.key, hint: c.title }))}
+                  labels={symbols.labels.map((l) => ({ key: l.key, hint: l.file }))}
                   marks={commentMarks}
                   onSelectionChange={(s, e) => setSelRange(e > s ? { start: s, end: e } : null)}
                 />
@@ -1606,9 +1698,9 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
                 <pre
                   ref={preRef}
                   onMouseUp={readSelection}
-                  className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-5 font-mono text-[13px] leading-relaxed text-ink/75"
+                  className={`min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-5 font-mono text-[13px] leading-relaxed ${editorDark ? "bg-[#0F1115] text-slate-300" : "text-ink/75"}`}
                 >
-                  {content ? <LatexHighlight value={content} /> : "This file is empty."}
+                  {content ? <LatexHighlight value={content} dark={editorDark} /> : "This file is empty."}
                 </pre>
               )}
               {/* Selection → add comment (also works in read-only — review scenario) */}
@@ -1883,9 +1975,32 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
             {preview?.error ? (
-              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap bg-white p-5 font-mono text-xs leading-relaxed text-red-600">
-                {preview.error}
-              </pre>
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-white">
+                {preview.errors && preview.errors.length > 0 && (
+                  <ul data-testid="compile-errors" className="divide-y divide-black/5 border-b border-black/5">
+                    <li className="bg-red-50 px-5 py-2 text-xs font-semibold text-red-700">
+                      {preview.errors.length} error(s) — click to jump to the line
+                    </li>
+                    {preview.errors.map((er, i) => (
+                      <li key={i}>
+                        <button
+                          type="button"
+                          onClick={() => void jumpToError(er)}
+                          className="flex w-full items-baseline gap-3 px-5 py-2.5 text-left transition hover:bg-red-50/60"
+                        >
+                          <span className="shrink-0 font-mono text-[11px] font-semibold text-red-600">
+                            {er.file}:{er.line}
+                          </span>
+                          <span className="min-w-0 text-xs text-ink/75">{er.message}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <pre className="whitespace-pre-wrap p-5 font-mono text-xs leading-relaxed text-red-600">
+                  {preview.error}
+                </pre>
+              </div>
             ) : preview?.bytes ? (
               <div data-testid="pdf-preview" className="flex min-h-0 flex-1 flex-col">
                 <PdfViewer data={preview.bytes} />
@@ -1903,6 +2018,17 @@ export default function PaperEditorPage({ params }: { params: Promise<{ id: stri
             )}
           </section>
       </div>
+      {bibOpen && (
+        <BibHelper
+          existingKeys={[...symbols.cites.map((c) => c.key), ...Array.from(content.matchAll(/@\w+\s*\{\s*([^,\s{}]+)\s*,/g), (m) => m[1])]}
+          onClose={() => setBibOpen(false)}
+          onAdd={(bibtex, key) => {
+            setContent((c) => (c.trimEnd() ? `${c.trimEnd()}\n\n` : "") + bibtex + "\n");
+            setDirty(true);
+            flash(`Added — cite it in the text with \\cite{${key}}.`);
+          }}
+        />
+      )}
     </div>
   );
 }

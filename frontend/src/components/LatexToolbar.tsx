@@ -105,11 +105,11 @@ function Palette({
   );
 }
 
-export default function LatexToolbar({ onInsert }: { onInsert: InsertFn }) {
+export default function LatexToolbar({ onInsert, dark = false }: { onInsert: InsertFn; dark?: boolean }) {
   return (
     <div
       data-testid="latex-toolbar"
-      className="flex flex-wrap items-center gap-0.5 border-b border-black/5 bg-gray-50/70 px-3 py-1.5"
+      className={`flex flex-wrap items-center gap-0.5 border-b px-3 py-1.5 ${dark ? "border-white/10 bg-[#14171C] [&_button]:text-slate-300 [&_button:hover]:bg-white/10 [&_button:hover]:text-white" : "border-black/5 bg-gray-50/70"}`}
     >
       {STRUCTURES.map((s) => (
         <button
